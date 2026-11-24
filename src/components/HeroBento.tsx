@@ -134,7 +134,11 @@ export function HeroBento({
                       style={{ backgroundColor: 'var(--lilac-backdrop)' }}
                     >
                       <ResilientImage
-                        `src={\${profile.portraitUrl}?v=2`}`
+                        src={
+                          profile.portraitUrl && !profile.portraitUrl.startsWith('data:')
+                            ? `${profile.portraitUrl}${profile.portraitUrl.includes('?') ? '&' : '?'}v=2`
+                            : profile.portraitUrl
+                        }
                         alt={`${profile.name} — ${profile.role} portrait`}
                         className="w-full h-full object-cover object-top grayscale contrast-110 transition-transform duration-500 group-hover/avatar:scale-105"
                         fallbackTitle={profile.name}
