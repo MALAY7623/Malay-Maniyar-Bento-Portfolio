@@ -104,7 +104,9 @@ export function VerticalNavRail({
         {/* Top About Me anchor with four-point star */}
         <button
           type="button"
+          data-nav-anchor="about"
           onClick={() => onNavigate('about')}
+          title="About Me (Use ↑ / ↓ arrow keys to jump between sections)"
           className={`group flex flex-col items-center gap-3 py-2 px-2 rounded-xl transition-colors duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--periwinkle)] ${
             activeView === 'portfolio' && activeSection === 'about'
               ? 'text-[var(--ink)] font-bold'
@@ -137,7 +139,9 @@ export function VerticalNavRail({
               <button
                 key={item.id}
                 type="button"
+                data-nav-anchor={item.id}
                 onClick={() => onNavigate(item.id)}
+                title={`${item.label} (Use ↑ / ↓ arrow keys to navigate)`}
                 className={`relative flex items-center justify-center py-2 px-2 rounded-lg transition-colors duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--periwinkle)] ${
                   isActive
                     ? 'text-[var(--ink)] font-bold'
@@ -240,17 +244,18 @@ function MobileCompactHeader({
 
   return (
     <header
-      className="lg:hidden sticky top-0 z-40 backdrop-blur-md border-b rounded-t-[24px] theme-surface"
+      className="lg:hidden sticky top-0 z-40 border-b rounded-t-[24px] theme-surface"
       style={{
-        backgroundColor: 'color-mix(in srgb, var(--workspace-bg) 92%, transparent)',
+        backgroundColor: 'color-mix(in srgb, var(--workspace-bg) 96%, transparent)',
         borderColor: 'var(--border-subtle)',
       }}
     >
       <div className="px-4 h-[52px] flex items-center justify-between gap-3">
         <button
           type="button"
+          data-nav-anchor-mobile="about"
           onClick={() => handleSelect('about')}
-          className="flex items-center gap-1.5 text-sm font-bold tracking-tight text-[var(--ink)] whitespace-nowrap shrink-0 cursor-pointer"
+          className="flex items-center gap-1.5 text-sm font-bold tracking-tight text-[var(--ink)] whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--periwinkle)] rounded-lg"
         >
           <span style={{ color: 'var(--periwinkle)' }} aria-hidden="true">
             ✦
@@ -270,8 +275,9 @@ function MobileCompactHeader({
                 <button
                   key={item.id}
                   type="button"
+                  data-nav-anchor-mobile={item.id}
                   onClick={() => handleSelect(item.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors duration-200 cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--periwinkle)] ${
                     isActive
                       ? 'bg-[var(--ink)] text-[var(--workspace-bg)]'
                       : 'text-[var(--ink-secondary)] hover:text-[var(--ink)]'

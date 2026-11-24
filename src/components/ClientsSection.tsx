@@ -11,9 +11,9 @@ export function ClientsSection({ capabilities }: ClientsSectionProps) {
   return (
     <section
       id="clients"
+      tabIndex={-1}
       aria-label="Creative Capabilities"
-      className="py-12 sm:py-16 border-t theme-surface"
-      style={{ borderColor: 'var(--border-subtle)' }}
+      className="py-10 sm:py-14 outline-none theme-surface"
     >
       {/* 3-Column Creative Capabilities Bento Breakdown */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 xl:gap-5">

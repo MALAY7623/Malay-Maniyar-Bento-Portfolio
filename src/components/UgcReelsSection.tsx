@@ -210,9 +210,9 @@ export function UgcReelsSection({ reels, sectionCopy, onSelectReel }: UgcReelsSe
   return (
     <section
       id="ugc-reels"
+      tabIndex={-1}
       aria-labelledby="ugc-reels-heading"
-      className="py-12 sm:py-16 border-t theme-surface"
-      style={{ borderColor: 'var(--border-subtle)' }}
+      className="py-10 sm:py-14 outline-none theme-surface"
     >
       {/* Desktop Sticky Horizontal Scroll Wrapper */}
       <div ref={stickyContainerRef} className="lg:h-[185vh] relative">

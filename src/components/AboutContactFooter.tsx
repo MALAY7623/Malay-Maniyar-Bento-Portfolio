@@ -26,9 +26,9 @@ export function AboutContactFooter({
   return (
     <footer
       id="contact"
+      tabIndex={-1}
       aria-labelledby="contact-heading"
-      className="pt-12 pb-6 sm:pt-16 sm:pb-8 border-t theme-surface"
-      style={{ borderColor: 'var(--border-subtle)' }}
+      className="pt-10 pb-6 sm:pt-14 sm:pb-8 outline-none theme-surface"
     >
       {/* Split Bento Footer Card: Primary Accent + Obsidian Surface */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 xl:gap-5 items-stretch">

@@ -341,9 +341,9 @@ export function DesignWorkSection({
     <section
       id="design-work"
       ref={sectionRef}
+      tabIndex={-1}
       aria-labelledby="design-work-heading"
-      className="py-12 sm:py-16 border-t theme-surface"
-      style={{ borderColor: 'var(--border-subtle)' }}
+      className="py-10 sm:py-14 outline-none theme-surface"
     >
       {/* Header + Interactive Category Filter Bar */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8 sm:mb-10">

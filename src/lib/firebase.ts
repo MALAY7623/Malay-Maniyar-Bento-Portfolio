@@ -1,13 +1,20 @@
 import { initializeApp } from 'firebase/app';
 import {
+  createUserWithEmailAndPassword,
   getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
   signOut,
   type User,
 } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
+import {
+  DEFAULT_ADMIN_ID,
+  resolveAuthorizedAdminEmail,
+  validateAdminLoginInput,
+} from '../utils/adminAuthLogic';
 
 const env = import.meta.env;
 
@@ -24,17 +31,14 @@ const firebaseConfig = {
     env.VITE_FIREBASE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId,
 };
 
+export const PRIMARY_ADMIN_ID = env.VITE_ADMIN_ID || DEFAULT_ADMIN_ID;
 export const PRIMARY_ADMIN_EMAIL =
   env.VITE_ADMIN_EMAIL || 'malaymaniyar2020@gmail.com';
+export const FIREBASE_CONSOLE_AUTH_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/providers`;
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
-
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: 'select_account',
-});
 
 export enum OperationType {
   CREATE = 'create',
@@ -60,6 +64,14 @@ export interface FirestoreErrorInfo {
       email?: string | null;
     }[];
   };
+}
+
+export interface AdminAuthResult {
+  ok: boolean;
+  reason?: string;
+  user?: User;
+  needsVerification?: boolean;
+  providerNotEnabled?: boolean;
 }
 
 export function handleFirestoreError(
@@ -95,53 +107,236 @@ export function isAuthorizedAdminUser(user: User | null): boolean {
   );
 }
 
-export async function signInAsAdmin(): Promise<{
-  ok: boolean;
-  reason?: string;
-  user?: User;
-}> {
+function getFirebaseErrorCode(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    return String((error as { code?: unknown }).code);
+  }
+  return '';
+}
+
+/**
+ * Authenticates the studio admin using Admin ID + Password via Firebase Auth
+ * Email/Password provider. Passwords are never stored or verified in client code.
+ */
+export async function signInWithAdminCredentials(
+  adminId: string,
+  password: string,
+): Promise<AdminAuthResult> {
+  const validation = validateAdminLoginInput(adminId, password);
+  if (!validation.isValid) {
+    return { ok: false, reason: validation.error };
+  }
+
+  const resolvedEmail = resolveAuthorizedAdminEmail(
+    adminId,
+    PRIMARY_ADMIN_ID,
+    PRIMARY_ADMIN_EMAIL,
+  );
+  if (!resolvedEmail) {
+    return {
+      ok: false,
+      reason: 'Invalid Admin ID or password.',
+    };
+  }
+
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
+    const credential = await signInWithEmailAndPassword(auth, resolvedEmail, password);
+    const user = credential.user;
+
+    if (!user.emailVerified) {
+      try {
+        await sendEmailVerification(user);
+      } catch {
+        // Verification email may already have been sent recently
+      }
+      return {
+        ok: false,
+        needsVerification: true,
+        reason: `Email verification is required once to unlock Firestore writes. A verification link was sent to ${PRIMARY_ADMIN_EMAIL}.`,
+      };
+    }
+
     if (!isAuthorizedAdminUser(user)) {
       await signOut(auth);
-      return {
-        ok: false,
-        reason: `Access denied. Only the verified primary admin account (${PRIMARY_ADMIN_EMAIL}) can sign in.`,
-      };
+      return { ok: false, reason: 'Access denied for this account.' };
     }
+
     return { ok: true, user };
   } catch (error) {
-    const code =
-      typeof error === 'object' && error !== null && 'code' in error
-        ? String((error as { code?: unknown }).code)
-        : '';
+    const code = getFirebaseErrorCode(error);
 
-    if (code === 'auth/unauthorized-domain') {
-      const host =
-        typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+    if (code === 'auth/operation-not-allowed') {
       return {
         ok: false,
-        reason: `Domain "${host}" is not authorized for Google Sign-In yet. Add "${host}" under Firebase Console → Authentication → Settings → Authorized domains.`,
+        providerNotEnabled: true,
+        reason:
+          'Email/Password sign-in is not enabled in Firebase Authentication yet. Enable it once in Firebase Console to activate Admin ID & Password login.',
       };
     }
 
-    if (code === 'auth/popup-blocked') {
+    if (
+      code === 'auth/invalid-credential' ||
+      code === 'auth/wrong-password' ||
+      code === 'auth/user-not-found'
+    ) {
       return {
         ok: false,
-        reason: 'Sign-in popup was blocked by your browser. Allow popups for this site and try again.',
+        reason:
+          'Invalid Admin ID or password. If this is your first login after switching from Gmail, open "First-Time Setup" below to register your password.',
       };
     }
 
-    if (code === 'auth/popup-closed-by-user') {
+    if (code === 'auth/too-many-requests') {
       return {
         ok: false,
-        reason: 'Sign-in popup was closed before authentication completed.',
+        reason: 'Too many sign-in attempts. Please wait a moment before trying again.',
       };
     }
 
     const message = error instanceof Error ? error.message : 'Unable to complete sign-in.';
     return { ok: false, reason: message };
+  }
+}
+
+/**
+ * One-time Firebase Auth Email/Password setup strictly for the authorized Admin ID.
+ */
+export async function setupAdminCredentials(
+  adminId: string,
+  password: string,
+): Promise<AdminAuthResult> {
+  const validation = validateAdminLoginInput(adminId, password);
+  if (!validation.isValid) {
+    return { ok: false, reason: validation.error };
+  }
+
+  const resolvedEmail = resolveAuthorizedAdminEmail(
+    adminId,
+    PRIMARY_ADMIN_ID,
+    PRIMARY_ADMIN_EMAIL,
+  );
+  if (!resolvedEmail) {
+    return {
+      ok: false,
+      reason: 'Only the configured primary Admin ID can initialize studio access.',
+    };
+  }
+
+  try {
+    const credential = await createUserWithEmailAndPassword(auth, resolvedEmail, password);
+    const user = credential.user;
+
+    if (!user.emailVerified) {
+      try {
+        await sendEmailVerification(user);
+      } catch {
+        // Ignore rate-limit on repeat requests
+      }
+      return {
+        ok: false,
+        needsVerification: true,
+        reason: `Admin password created! Open the verification link sent to ${PRIMARY_ADMIN_EMAIL}, then click "I've Verified — Continue".`,
+      };
+    }
+
+    return { ok: true, user };
+  } catch (error) {
+    const code = getFirebaseErrorCode(error);
+
+    if (code === 'auth/operation-not-allowed') {
+      return {
+        ok: false,
+        providerNotEnabled: true,
+        reason:
+          'Enable the Email/Password sign-in provider in Firebase Console first, then retry First-Time Setup.',
+      };
+    }
+
+    if (code === 'auth/email-already-in-use') {
+      return {
+        ok: false,
+        reason:
+          'An account already exists for this Admin ID. Switch to Sign In, or use "Reset Password" if you previously signed in via Google.',
+      };
+    }
+
+    if (code === 'auth/weak-password') {
+      return {
+        ok: false,
+        reason: 'Please choose a stronger password (at least 6 characters).',
+      };
+    }
+
+    const message = error instanceof Error ? error.message : 'Unable to create admin password.';
+    return { ok: false, reason: message };
+  }
+}
+
+/**
+ * Reloads the active Firebase Auth user to check whether email verification completed.
+ */
+export async function checkAdminVerificationStatus(): Promise<AdminAuthResult> {
+  const current = auth.currentUser;
+  if (!current) {
+    return { ok: false, reason: 'Please sign in with your Admin ID and password first.' };
+  }
+  try {
+    await current.reload();
+    if (isAuthorizedAdminUser(auth.currentUser)) {
+      return { ok: true, user: auth.currentUser ?? undefined };
+    }
+    return {
+      ok: false,
+      needsVerification: true,
+      reason: `Verification not detected yet. Check ${PRIMARY_ADMIN_EMAIL} (including Spam/Updates) and click the verification link.`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to refresh verification status.';
+    return { ok: false, reason: message };
+  }
+}
+
+export async function resendAdminVerificationEmail(): Promise<{ ok: boolean; message: string }> {
+  const current = auth.currentUser;
+  if (!current) {
+    return { ok: false, message: 'Sign in with your Admin ID and password first.' };
+  }
+  try {
+    await sendEmailVerification(current);
+    return { ok: true, message: `Verification email resent to ${PRIMARY_ADMIN_EMAIL}.` };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not resend verification email right now.';
+    return { ok: false, message };
+  }
+}
+
+export async function sendAdminPasswordReset(
+  adminId: string,
+): Promise<{ ok: boolean; message: string }> {
+  const resolvedEmail = resolveAuthorizedAdminEmail(
+    adminId || PRIMARY_ADMIN_ID,
+    PRIMARY_ADMIN_ID,
+    PRIMARY_ADMIN_EMAIL,
+  );
+  if (!resolvedEmail) {
+    return { ok: false, message: 'Enter your configured Admin ID to request a password reset.' };
+  }
+  try {
+    await sendPasswordResetEmail(auth, resolvedEmail);
+    return {
+      ok: true,
+      message: `Password setup / reset link sent to ${PRIMARY_ADMIN_EMAIL}. Check your inbox to set your password.`,
+    };
+  } catch (error) {
+    const code = getFirebaseErrorCode(error);
+    if (code === 'auth/operation-not-allowed') {
+      return {
+        ok: false,
+        message: 'Enable Email/Password provider in Firebase Console before sending a reset link.',
+      };
+    }
+    const message = error instanceof Error ? error.message : 'Could not send reset email.';
+    return { ok: false, message };
   }
 }
 

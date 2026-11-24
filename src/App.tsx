@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { AnimatePresence, MotionConfig, motion, useScroll, useSpring } from 'motion/react';
 import { Check } from 'lucide-react';
@@ -35,6 +35,10 @@ import type {
 } from './types/portfolio';
 import { computeActiveSection } from './utils/portfolioLogic';
 import {
+  resolveSectionByArrowKey,
+  shouldHandleGlobalArrowNavigation,
+} from './utils/keyboardNavigation';
+import {
   applyThemeToRoot,
   resolveInitialThemeMode,
   THEME_STORAGE_KEY,
@@ -55,6 +59,8 @@ import { CustomSectionsRenderer } from './components/CustomSectionsRenderer';
 import { AdminAccessGate } from './components/AdminAccessGate';
 import { AdminDashboard } from './components/AdminDashboard';
 import { PhysicsCursor } from './components/PhysicsCursor';
+import { ThreeScrollStage } from './components/ThreeScrollStage';
+import { SectionDivider } from './components/SectionDivider';
 
 const TRACKED_SECTIONS: NavSectionId[] = [
   'about',
@@ -63,6 +69,14 @@ const TRACKED_SECTIONS: NavSectionId[] = [
   'clients',
   'contact',
 ];
+
+const SECTION_LABELS: Record<NavSectionId, string> = {
+  about: 'About Me',
+  'ugc-reels': 'UGC Reels',
+  'design-work': 'Design Work',
+  clients: 'Clients & Capabilities',
+  contact: 'Contact',
+};
 
 function clearAdminHash() {
   if (window.location.hash.toLowerCase() === '#admin') {
@@ -97,6 +111,9 @@ export default function App() {
   const [activeReel, setActiveReel] = useState<UgcReel | null>(null);
   const [activeArtwork, setActiveArtwork] = useState<DesignProject | null>(null);
   const [isInquiryOpen, setIsInquiryOpen] = useState(false);
+  const [isStagePreview, setIsStagePreview] = useState(false);
+  const [navAnnouncement, setNavAnnouncement] = useState('');
+  const navScrollLockUntilRef = useRef(0);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'light';
     try {
@@ -211,6 +228,9 @@ export default function App() {
     if (activeView !== 'portfolio') return;
 
     const updateActiveSection = () => {
+      if (performance.now() < navScrollLockUntilRef.current) {
+        return;
+      }
       const metrics = TRACKED_SECTIONS.map((id) => {
         const el = document.getElementById(id);
         return {
@@ -234,6 +254,7 @@ export default function App() {
 
   const handleNavigate = useCallback(
     (sectionId: NavSectionId) => {
+      navScrollLockUntilRef.current = performance.now() + 720;
       setActiveSection(sectionId);
       if (activeView !== 'portfolio') {
         setActiveView('portfolio');
@@ -250,6 +271,72 @@ export default function App() {
     },
     [activeView],
   );
+
+  // Global Keyboard Support: Arrow keys (and Home/End) navigate between sections
+  // and move focus cleanly onto the corresponding main navigation anchor.
+  useEffect(() => {
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isStagePreview) {
+        setIsStagePreview(false);
+        return;
+      }
+
+      const hasOpenOverlay = Boolean(
+        activeReel || activeArtwork || isInquiryOpen || (showAdminGate && !isAdmin),
+      );
+
+      if (
+        !shouldHandleGlobalArrowNavigation({
+          activeView,
+          hasOpenOverlay,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          target: event.target instanceof HTMLElement ? event.target : null,
+        })
+      ) {
+        return;
+      }
+
+      const nextSection = resolveSectionByArrowKey(event.key, activeSection);
+      if (!nextSection) return;
+
+      event.preventDefault();
+      handleNavigate(nextSection);
+
+      // Focus the visible main navigation anchor (desktop rail first, then mobile/tablet, else section)
+      const desktopAnchor = document.querySelector<HTMLElement>(
+        `[data-nav-anchor="${nextSection}"]`,
+      );
+      const mobileAnchor = document.querySelector<HTMLElement>(
+        `[data-nav-anchor-mobile="${nextSection}"]`,
+      );
+      const sectionEl = document.getElementById(nextSection);
+
+      if (desktopAnchor && desktopAnchor.offsetParent !== null) {
+        desktopAnchor.focus({ preventScroll: true });
+      } else if (mobileAnchor && mobileAnchor.offsetParent !== null) {
+        mobileAnchor.focus({ preventScroll: true });
+      } else if (sectionEl) {
+        sectionEl.focus({ preventScroll: true });
+      }
+
+      setNavAnnouncement(`Navigated to ${SECTION_LABELS[nextSection]} section`);
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [
+    activeArtwork,
+    activeReel,
+    activeSection,
+    activeView,
+    handleNavigate,
+    isAdmin,
+    isInquiryOpen,
+    isStagePreview,
+    showAdminGate,
+  ]);
 
   const handleNavigateDesignCategory = useCallback(
     (category: DesignCategory) => {
@@ -325,12 +412,31 @@ export default function App() {
     clearAdminHash();
   };
 
+  const isAdminPanelOpen = isAdmin && activeView === 'admin';
+
   return (
     <MotionConfig reducedMotion="user">
       <div
-        className="min-h-screen p-2.5 sm:p-4 lg:p-6 theme-surface"
-        style={{ backgroundColor: 'var(--canvas-bg)', color: 'var(--ink)' }}
+        className="relative min-h-screen p-2.5 sm:p-4 lg:p-6 theme-surface"
+        style={{
+          backgroundColor: 'var(--canvas-bg)',
+          color: 'var(--ink)',
+        }}
       >
+        {/* Ambient Three.js Scroll-Choreographed 3D Sculpture Studio Backdrop */}
+        <ThreeScrollStage
+          themeMode={themeMode}
+          siteTheme={siteConfig.theme}
+          disabled={isAdminPanelOpen}
+          stagePreview={isStagePreview && !isAdminPanelOpen}
+          onToggleStagePreview={() => setIsStagePreview((prev) => !prev)}
+        />
+
+        {/* Polite Screen-Reader Live Region for Keyboard Section Navigation */}
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {navAnnouncement}
+        </div>
+
         {/* Thin Top Scroll Progress Bar */}
         <motion.div
           aria-hidden="true"
@@ -339,16 +445,17 @@ export default function App() {
         />
 
         {/* Editorial Physics-Based Follower Cursor (desktop fine-pointer only) */}
-        <PhysicsCursor
-          disabled={isAdmin && activeView === 'admin'}
-          isDarkMode={themeMode === 'dark'}
-        />
+        <PhysicsCursor disabled={isAdminPanelOpen} isDarkMode={themeMode === 'dark'} />
 
         {/* Main Rounded Editorial Workspace Container */}
         <div
-          className="max-w-[1380px] mx-auto rounded-[24px] lg:rounded-[32px] shadow-[0_24px_70px_rgba(17,17,17,0.07)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.55)] border theme-surface"
+          className={`relative z-10 max-w-[1380px] mx-auto rounded-[24px] lg:rounded-[32px] shadow-[0_24px_70px_rgba(17,17,17,0.08)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.58)] border theme-surface transition-opacity duration-500 ${
+            isStagePreview && !isAdminPanelOpen ? 'opacity-10 pointer-events-none select-none' : 'opacity-100'
+          }`}
           style={{
-            backgroundColor: 'var(--workspace-bg)',
+            backgroundColor: isAdminPanelOpen
+              ? 'var(--workspace-bg)'
+              : 'color-mix(in srgb, var(--workspace-bg) 93%, transparent)',
             borderColor: 'var(--border-subtle)',
           }}
         >
@@ -408,6 +515,8 @@ export default function App() {
                   onOpenInquiry={() => setIsInquiryOpen(true)}
                 />
 
+                <SectionDivider label="01 · UGC Reels" accentVar="mint" />
+
                 <UgcReelsSection
                   reels={ugcReels}
                   sectionCopy={siteConfig.sections}
@@ -419,6 +528,8 @@ export default function App() {
                   placement="after-ugc"
                   onOpenInquiry={() => setIsInquiryOpen(true)}
                 />
+
+                <SectionDivider label="02 · Design Work" accentVar="periwinkle" />
 
                 <DesignWorkSection
                   projects={designProjects}
@@ -435,6 +546,8 @@ export default function App() {
                   onOpenInquiry={() => setIsInquiryOpen(true)}
                 />
 
+                <SectionDivider label="03 · Capabilities" accentVar="apricot" />
+
                 <ClientsSection capabilities={capabilities} />
 
                 <CustomSectionsRenderer
@@ -442,6 +555,8 @@ export default function App() {
                   placement="after-capabilities"
                   onOpenInquiry={() => setIsInquiryOpen(true)}
                 />
+
+                <SectionDivider label="04 · Contact" accentVar="periwinkle" />
 
                 <AboutContactFooter
                   profile={siteConfig.profile}

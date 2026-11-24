@@ -68,8 +68,9 @@ export function HeroBento({
     <section
       id="about"
       ref={heroRef}
+      tabIndex={-1}
       aria-label="Hero Portfolio Overview"
-      className="pt-4 pb-10 sm:pt-6 sm:pb-14 lg:pt-8 lg:pb-16"
+      className="pt-4 pb-10 sm:pt-6 sm:pb-14 lg:pt-8 lg:pb-16 outline-none"
     >
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 xl:gap-5 items-stretch">
         {/* ============================================================
@@ -293,9 +294,9 @@ export function HeroBento({
                   <CornerBracket size={16} strokeWidth={2.2} />
                 </div>
 
-                {/* Central Frosted-Glass Play Button */}
+                {/* Central Translucent Play Button */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="w-16 h-16 sm:w-[70px] sm:h-[70px] rounded-full bg-white/22 backdrop-blur-md border border-white/40 flex items-center justify-center text-white shadow-[0_10px_30px_rgba(0,0,0,0.28)] transition-transform duration-200 ease-out group-hover:scale-110 group-hover:bg-white/30">
+                  <span className="w-16 h-16 sm:w-[70px] sm:h-[70px] rounded-full bg-black/45 border border-white/45 flex items-center justify-center text-white shadow-[0_10px_30px_rgba(0,0,0,0.32)] transition-transform duration-200 ease-out group-hover:scale-110 group-hover:bg-black/60">
                     <Play className="w-7 h-7 fill-white translate-x-0.5" aria-hidden="true" />
                   </span>
                 </div>
