@@ -134,10 +134,8 @@ export function HeroBento({
                       style={{ backgroundColor: 'var(--lilac-backdrop)' }}
                     >
                       <ResilientImage
-                        src={
-                          profile.portraitUrl && !profile.portraitUrl.startsWith('data:')
-                            ? `${profile.portraitUrl}${profile.portraitUrl.includes('?') ? '&' : '?'}v=2`
-                            : profile.portraitUrl
+                        src={'https://drive.google.com/uc?export=download&id=1TNHf881kvCehLJe6yqZWiRTVq7bGSHRv?v=3'
+                          
                         }
                         alt={`${profile.name} — ${profile.role} portrait`}
                         className="w-full h-full object-cover object-top grayscale contrast-110 transition-transform duration-500 group-hover/avatar:scale-105"
