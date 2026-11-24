@@ -190,28 +190,31 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // 2. Hidden Admin Entry Trigger (#admin URL hash OR Ctrl/Cmd + Shift + A)
-  useEffect(() => {
-    const openAdminTrigger = () => {
-      if (isAdmin) {
-        setShowAdminGate(false);
-        setActiveView('admin');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        setShowAdminGate(true);
+  const handleOpenAdminAccess = useCallback(() => {
+    if (isAdmin) {
+      setShowAdminGate(false);
+      setActiveView('admin');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      if (window.location.hash.toLowerCase() !== '#admin') {
+        window.history.replaceState(null, '', '#admin');
       }
-    };
+      setShowAdminGate(true);
+    }
+  }, [isAdmin]);
 
+  // 2. Hidden Admin Entry Trigger (#admin URL hash, Ctrl/Cmd + Shift + A, or 10x stamp tap)
+  useEffect(() => {
     const checkHash = () => {
       if (window.location.hash.toLowerCase() === '#admin') {
-        openAdminTrigger();
+        handleOpenAdminAccess();
       }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'a') {
         event.preventDefault();
-        openAdminTrigger();
+        handleOpenAdminAccess();
       }
     };
 
@@ -222,7 +225,7 @@ export default function App() {
       window.removeEventListener('hashchange', checkHash);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isAdmin]);
+  }, [handleOpenAdminAccess]);
 
   // 3. Live Firestore Subscriptions for public portfolio content
   useEffect(() => {
@@ -570,6 +573,7 @@ export default function App() {
                   onOpenShowreel={() => setActiveReel(featuredShowreelModalItem)}
                   onNavigate={handleNavigate}
                   onNavigateDesignCategory={handleNavigateDesignCategory}
+                  onOpenAdminAccess={handleOpenAdminAccess}
                 />
 
                 <CustomSectionsRenderer

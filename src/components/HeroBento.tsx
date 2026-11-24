@@ -22,6 +22,7 @@ interface HeroBentoProps {
   onOpenShowreel: () => void;
   onNavigate: (sectionId: NavSectionId) => void;
   onNavigateDesignCategory: (category: DesignCategory) => void;
+  onOpenAdminAccess?: () => void;
 }
 
 export function HeroBento({
@@ -33,6 +34,7 @@ export function HeroBento({
   onOpenShowreel,
   onNavigate,
   onNavigateDesignCategory,
+  onOpenAdminAccess,
 }: HeroBentoProps) {
   const heroRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -217,7 +219,7 @@ export function HeroBento({
                   )}
                 </button>
 
-                <RotatingStampBadge />
+                <RotatingStampBadge onRapidTapTrigger={onOpenAdminAccess} />
               </div>
             </div>
           </TiltBentoCard>

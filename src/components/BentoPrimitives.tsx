@@ -9,6 +9,13 @@ import {
   useVelocity,
 } from 'motion/react';
 import { Image as ImageIcon } from 'lucide-react';
+import {
+  advanceRapidTapState,
+  DEFAULT_RAPID_TAP_TARGET,
+  DEFAULT_RAPID_TAP_WINDOW_MS,
+  INITIAL_RAPID_TAP_STATE,
+  type RapidTapState,
+} from '../utils/rapidTapCounter';
 
 interface CornerBracketProps {
   className?: string;
@@ -319,15 +326,60 @@ export function IridescentSphere() {
   );
 }
 
+interface RotatingStampBadgeProps {
+  onRapidTapTrigger?: () => void;
+}
+
 /**
  * Continuously rotating circular portfolio stamp badge that subtly accelerates on scroll.
+ * Tracks rapid consecutive taps and triggers login navigation only at exactly 10 rapid taps.
  */
-export function RotatingStampBadge() {
+export function RotatingStampBadge({ onRapidTapTrigger }: RotatingStampBadgeProps) {
   const prefersReducedMotion = useReducedMotion();
   const { scrollY } = useScroll();
   const scrollVelocity = useVelocity(scrollY);
   const smoothVelocity = useSpring(scrollVelocity, { damping: 40, stiffness: 260 });
   const rotation = useMotionValue(0);
+
+  const tapStateRef = useRef<RapidTapState>(INITIAL_RAPID_TAP_STATE);
+  const resetTimerRef = useRef<number | null>(null);
+  const [tapCount, setTapCount] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleStampTap = () => {
+    if (!onRapidTapTrigger) return;
+
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+
+    const next = advanceRapidTapState(tapStateRef.current, performance.now(), {
+      targetCount: DEFAULT_RAPID_TAP_TARGET,
+      maxGapMs: DEFAULT_RAPID_TAP_WINDOW_MS,
+    });
+
+    tapStateRef.current = { count: next.count, lastTapMs: next.lastTapMs };
+    setTapCount(next.count);
+
+    if (next.triggered) {
+      onRapidTapTrigger();
+      return;
+    }
+
+    resetTimerRef.current = window.setTimeout(() => {
+      tapStateRef.current = INITIAL_RAPID_TAP_STATE;
+      setTapCount(0);
+      resetTimerRef.current = null;
+    }, DEFAULT_RAPID_TAP_WINDOW_MS);
+  };
 
   useAnimationFrame((_, delta) => {
     if (prefersReducedMotion) return;
@@ -338,8 +390,12 @@ export function RotatingStampBadge() {
   });
 
   return (
-    <div
-      className="relative w-16 h-16 sm:w-[88px] sm:h-[88px] shrink-0 flex items-center justify-center select-none"
+    <button
+      type="button"
+      onClick={handleStampTap}
+      data-testid="rapid-tap-stamp"
+      data-tap-count={tapCount}
+      className="relative w-16 h-16 sm:w-[88px] sm:h-[88px] shrink-0 flex items-center justify-center select-none bg-transparent border-0 p-0 appearance-none focus:outline-none"
       aria-label="Creative Portfolio Graphic and UGC"
     >
       <motion.svg
@@ -375,6 +431,6 @@ export function RotatingStampBadge() {
       >
         <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" />
       </svg>
-    </div>
+    </button>
   );
 }
