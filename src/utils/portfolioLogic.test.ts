@@ -197,3 +197,48 @@ test('cmsUtils hex validation, slug IDs, and siteConfig sanitization enforce Fir
   );
 });
 
+test('cmsUtils enforces Firestore minimum string lengths on siteConfig and designProject payloads', async () => {
+  const {
+    boundedStringWithFallback,
+    sanitizeDesignProjectPayload,
+    sanitizeSiteConfig,
+  } = await import('./cmsUtils');
+
+  assert.equal(boundedStringWithFallback('ab', 5, 180, 'fallback@example.com'), 'fallback@example.com');
+  assert.equal(boundedStringWithFallback('hello@site.com', 5, 180, 'fallback@example.com'), 'hello@site.com');
+
+  const safeSite = sanitizeSiteConfig({
+    profile: {
+      name: 'Malay',
+      role: 'Designer',
+      email: 'a@b',
+      phoneDisplay: '91',
+      whatsappUrl: '',
+      location: '',
+      availability: '',
+      portraitUrl: '',
+      instagramUrl: '',
+      behanceUrl: '',
+      gumroadUrl: '',
+    },
+  });
+  assert.ok(safeSite.profile.email.length >= 5);
+  assert.ok(safeSite.profile.phoneDisplay.length >= 3);
+
+  const safeDesign = sanitizeDesignProjectPayload({
+    title: 'Poster',
+    subtitle: '',
+    category: 'Brand Identity',
+    year: '26',
+    client: '',
+    imageUrl: '/sample.jpg',
+    aspectClass: 'aspect-[4/3]',
+    palette: [],
+    tools: [],
+    rationale: '',
+    deliverables: '',
+  });
+  assert.equal(safeDesign.year, '2026');
+});
+
+

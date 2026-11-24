@@ -32,7 +32,9 @@ service cloud.firestore {
 
     // Bootstrapped primary admin (strictly email_verified == true) OR server-provisioned /admins/{uid}
     function isPrimaryAdmin() {
-      return isVerifiedUser() && request.auth.token.email == 'malaymaniyar2020@gmail.com';
+      return isVerifiedUser() &&
+        request.auth.token.email is string &&
+        request.auth.token.email.lower() == 'malaymaniyar2020@gmail.com';
     }
 
     function isAdmin() {

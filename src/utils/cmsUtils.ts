@@ -30,6 +30,20 @@ export function truncateString(value: unknown, maxLen: number): string {
 }
 
 /**
+ * Guarantees a trimmed string satisfies both Firestore minLen and maxLen bounds,
+ * falling back cleanly when shorter than minLen.
+ */
+export function boundedStringWithFallback(
+  value: unknown,
+  minLen: number,
+  maxLen: number,
+  fallback: string,
+): string {
+  const cleaned = truncateString(value, maxLen);
+  return cleaned.length >= minLen ? cleaned : fallback;
+}
+
+/**
  * Generates a Firestore-safe document ID matching ^[a-zA-Z0-9_\-]+$ (<= 128 chars).
  */
 export function createSlugId(prefix: string, label: string): string {
@@ -82,10 +96,10 @@ export function sanitizeSiteConfig(raw: Partial<SiteConfig>): SiteConfig {
   return {
     theme: sanitizeThemePalette(raw.theme),
     profile: {
-      name: truncateString(p.name, 100) || d.profile.name,
-      role: truncateString(p.role, 140) || d.profile.role,
-      email: truncateString(p.email, 180) || d.profile.email,
-      phoneDisplay: truncateString(p.phoneDisplay, 40) || d.profile.phoneDisplay,
+      name: boundedStringWithFallback(p.name, 1, 100, d.profile.name),
+      role: boundedStringWithFallback(p.role, 1, 140, d.profile.role),
+      email: boundedStringWithFallback(p.email, 5, 180, d.profile.email),
+      phoneDisplay: boundedStringWithFallback(p.phoneDisplay, 3, 40, d.profile.phoneDisplay),
       whatsappUrl: truncateString(p.whatsappUrl, 300),
       location: truncateString(p.location, 120),
       availability: truncateString(p.availability, 160),
@@ -207,7 +221,7 @@ export function sanitizeDesignProjectPayload(project: Omit<DesignProject, 'id'>,
     title: truncateString(project.title, 140) || 'Untitled Project',
     subtitle: truncateString(project.subtitle, 240),
     category,
-    year: truncateString(project.year, 12) || '2026',
+    year: boundedStringWithFallback(project.year, 4, 12, '2026'),
     client: truncateString(project.client, 100),
     imageUrl:
       truncateString(project.imageUrl, 260000) ||

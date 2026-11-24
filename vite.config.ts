@@ -10,6 +10,8 @@ export default defineConfig(() => {
     build: {
       outDir: 'dist',
       sourcemap: false,
+      minify: true,
+      cssCodeSplit: true,
     },
     plugins: [
       react(),

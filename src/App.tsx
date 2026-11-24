@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { AnimatePresence, MotionConfig, motion, useScroll, useSpring } from 'motion/react';
 import { Check } from 'lucide-react';
@@ -13,7 +13,7 @@ import {
   DESIGN_PROJECTS,
   UGC_REELS,
 } from './data/portfolioData';
-import { auth, isAuthorizedAdminUser, signOutAdmin } from './lib/firebase';
+import { auth, ensureFreshAdminToken, isAuthorizedAdminUser, signOutAdmin } from './lib/firebase';
 import {
   saveSiteConfig,
   subscribeCapabilities,
@@ -53,15 +53,31 @@ import { UgcReelsSection } from './components/UgcReelsSection';
 import { DesignWorkSection } from './components/DesignWorkSection';
 import { ClientsSection } from './components/ClientsSection';
 import { AboutContactFooter } from './components/AboutContactFooter';
-import { VideoLightboxModal } from './components/VideoLightboxModal';
-import { ArtworkLightboxModal } from './components/ArtworkLightboxModal';
-import { ProjectInquiryDrawer } from './components/ProjectInquiryDrawer';
 import { CustomSectionsRenderer } from './components/CustomSectionsRenderer';
-import { AdminAccessGate } from './components/AdminAccessGate';
-import { AdminDashboard } from './components/AdminDashboard';
-import { PhysicsCursor } from './components/PhysicsCursor';
-import { ThreeScrollStage } from './components/ThreeScrollStage';
 import { SectionDivider } from './components/SectionDivider';
+
+// Code-split heavy non-critical & admin-only bundles off the initial render path
+const ThreeScrollStage = lazy(() =>
+  import('./components/ThreeScrollStage').then((m) => ({ default: m.ThreeScrollStage })),
+);
+const PhysicsCursor = lazy(() =>
+  import('./components/PhysicsCursor').then((m) => ({ default: m.PhysicsCursor })),
+);
+const AdminDashboard = lazy(() =>
+  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
+);
+const AdminAccessGate = lazy(() =>
+  import('./components/AdminAccessGate').then((m) => ({ default: m.AdminAccessGate })),
+);
+const VideoLightboxModal = lazy(() =>
+  import('./components/VideoLightboxModal').then((m) => ({ default: m.VideoLightboxModal })),
+);
+const ArtworkLightboxModal = lazy(() =>
+  import('./components/ArtworkLightboxModal').then((m) => ({ default: m.ArtworkLightboxModal })),
+);
+const ProjectInquiryDrawer = lazy(() =>
+  import('./components/ProjectInquiryDrawer').then((m) => ({ default: m.ProjectInquiryDrawer })),
+);
 
 const TRACKED_SECTIONS: NavSectionId[] = [
   'about',
@@ -129,7 +145,33 @@ export default function App() {
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, SCROLL_PARALLAX_SPRING);
 
-  // 1. Firebase Auth listener — strictly enforce verified primary admin
+  const [isAmbientReady, setIsAmbientReady] = useState(false);
+
+  // Defer ambient 3D stage & physics cursor until after initial Hero first paint
+  useEffect(() => {
+    let cancelled = false;
+    const activate = () => {
+      if (!cancelled) setIsAmbientReady(true);
+    };
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      const idleId = w.requestIdleCallback(activate, { timeout: 220 });
+      return () => {
+        cancelled = true;
+        w.cancelIdleCallback?.(idleId);
+      };
+    }
+    const timer = globalThis.setTimeout(activate, 120);
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(timer);
+    };
+  }, []);
+
+  // 1. Firebase Auth listener — strictly enforce verified primary admin & fresh JWT claims
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user && !isAuthorizedAdminUser(user)) {
@@ -139,7 +181,9 @@ export default function App() {
         return;
       }
       setAuthUser(user);
-      if (!user) {
+      if (user) {
+        void ensureFreshAdminToken(false);
+      } else {
         setActiveView('portfolio');
       }
     });
@@ -426,14 +470,18 @@ export default function App() {
           color: 'var(--ink)',
         }}
       >
-        {/* Ambient Three.js Scroll-Choreographed 3D Sculpture Studio Backdrop */}
-        <ThreeScrollStage
-          themeMode={themeMode}
-          siteTheme={siteConfig.theme}
-          disabled={isAdminPanelOpen}
-          stagePreview={isStagePreview && !isAdminPanelOpen}
-          onToggleStagePreview={() => setIsStagePreview((prev) => !prev)}
-        />
+        {/* Ambient Three.js Scroll-Choreographed 3D Sculpture Studio Backdrop (deferred past Hero FCP) */}
+        {isAmbientReady && !isAdminPanelOpen && (
+          <Suspense fallback={null}>
+            <ThreeScrollStage
+              themeMode={themeMode}
+              siteTheme={siteConfig.theme}
+              disabled={isAdminPanelOpen}
+              stagePreview={isStagePreview && !isAdminPanelOpen}
+              onToggleStagePreview={() => setIsStagePreview((prev) => !prev)}
+            />
+          </Suspense>
+        )}
 
         {/* Polite Screen-Reader Live Region for Keyboard Section Navigation */}
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -447,8 +495,12 @@ export default function App() {
           className="fixed top-0 left-0 right-0 h-[3px] origin-left z-50 pointer-events-none"
         />
 
-        {/* Editorial Physics-Based Follower Cursor (desktop fine-pointer only) */}
-        <PhysicsCursor disabled={isAdminPanelOpen} isDarkMode={themeMode === 'dark'} />
+        {/* Editorial Physics-Based Follower Cursor (desktop fine-pointer only, lazy-loaded) */}
+        {isAmbientReady && !isAdminPanelOpen && (
+          <Suspense fallback={null}>
+            <PhysicsCursor disabled={isAdminPanelOpen} isDarkMode={themeMode === 'dark'} />
+          </Suspense>
+        )}
 
         {/* Main Rounded Editorial Workspace Container */}
         <div
@@ -483,22 +535,30 @@ export default function App() {
           {/* Main Scrollable Content: Either Public Portfolio OR Admin Control Panel */}
           <main ref={portfolioMainRef} className="flex-1 min-w-0 px-4 sm:px-7 lg:px-9 xl:px-11 pb-8">
             {isAdmin && activeView === 'admin' ? (
-              <AdminDashboard
-                adminEmail={authUser?.email || ''}
-                isUsingCloudDefaults={isUsingCloudDefaults}
-                siteConfig={siteConfig}
-                ugcReels={ugcReels}
-                designProjects={designProjects}
-                capabilities={capabilities}
-                customSections={customSections}
-                inquiries={inquiries}
-                onViewLiveSite={() => {
-                  setActiveView('portfolio');
-                  clearAdminHash();
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                onSignOut={handleSignOutAdmin}
-              />
+              <Suspense
+                fallback={
+                  <div className="py-16 flex items-center justify-center text-sm font-semibold text-[var(--ink-secondary)]">
+                    Loading Admin Studio…
+                  </div>
+                }
+              >
+                <AdminDashboard
+                  adminEmail={authUser?.email || ''}
+                  isUsingCloudDefaults={isUsingCloudDefaults}
+                  siteConfig={siteConfig}
+                  ugcReels={ugcReels}
+                  designProjects={designProjects}
+                  capabilities={capabilities}
+                  customSections={customSections}
+                  inquiries={inquiries}
+                  onViewLiveSite={() => {
+                    setActiveView('portfolio');
+                    clearAdminHash();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  onSignOut={handleSignOutAdmin}
+                />
+              </Suspense>
             ) : (
               <>
                 <HeroBento
@@ -598,38 +658,54 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Modals & Inquiry Drawer */}
-        <VideoLightboxModal
-          reel={activeReel}
-          onClose={() => setActiveReel(null)}
-          onStartProject={() => setIsInquiryOpen(true)}
-        />
+        {/* Modals & Inquiry Drawer (lazy-loaded on demand) */}
+        {activeReel && (
+          <Suspense fallback={null}>
+            <VideoLightboxModal
+              reel={activeReel}
+              onClose={() => setActiveReel(null)}
+              onStartProject={() => setIsInquiryOpen(true)}
+            />
+          </Suspense>
+        )}
 
-        <ArtworkLightboxModal
-          project={activeArtwork}
-          onClose={() => setActiveArtwork(null)}
-          onStartProject={() => setIsInquiryOpen(true)}
-        />
+        {activeArtwork && (
+          <Suspense fallback={null}>
+            <ArtworkLightboxModal
+              project={activeArtwork}
+              onClose={() => setActiveArtwork(null)}
+              onStartProject={() => setIsInquiryOpen(true)}
+            />
+          </Suspense>
+        )}
 
-        <ProjectInquiryDrawer
-          profile={siteConfig.profile}
-          isOpen={isInquiryOpen}
-          onClose={() => setIsInquiryOpen(false)}
-        />
+        {isInquiryOpen && (
+          <Suspense fallback={null}>
+            <ProjectInquiryDrawer
+              profile={siteConfig.profile}
+              isOpen={isInquiryOpen}
+              onClose={() => setIsInquiryOpen(false)}
+            />
+          </Suspense>
+        )}
 
         {/* Hidden Admin Authentication Gate (only appears via #admin hash or Ctrl/Cmd+Shift+A) */}
-        <AdminAccessGate
-          isOpen={showAdminGate && !isAdmin}
-          onClose={() => {
-            setShowAdminGate(false);
-            clearAdminHash();
-          }}
-          onAuthenticated={() => {
-            setShowAdminGate(false);
-            setActiveView('admin');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        />
+        {showAdminGate && !isAdmin && (
+          <Suspense fallback={null}>
+            <AdminAccessGate
+              isOpen={showAdminGate && !isAdmin}
+              onClose={() => {
+                setShowAdminGate(false);
+                clearAdminHash();
+              }}
+              onAuthenticated={() => {
+                setShowAdminGate(false);
+                setActiveView('admin');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          </Suspense>
+        )}
       </div>
     </MotionConfig>
   );

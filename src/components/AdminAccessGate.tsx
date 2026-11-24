@@ -73,10 +73,18 @@ export function AdminAccessGate({ isOpen, onClose, onAuthenticated }: AdminAcces
           : await signInWithAdminCredentials(adminId, password);
 
       if (result.ok) {
+        console.info('[AuthGate] Admin sign-in succeeded', { mode, uid: result.user?.uid });
         setPassword('');
         onAuthenticated();
         return;
       }
+
+      console.warn('[AuthGate] Admin sign-in returned non-ok result', {
+        mode,
+        errorCode: result.errorCode || 'none',
+        providerNotEnabled: Boolean(result.providerNotEnabled),
+        needsVerification: Boolean(result.needsVerification),
+      });
 
       if (result.providerNotEnabled) {
         setProviderNotEnabled(true);
@@ -89,6 +97,7 @@ export function AdminAccessGate({ isOpen, onClose, onAuthenticated }: AdminAcces
         setErrorMsg(result.reason || 'Authentication failed.');
       }
     } catch (error) {
+      console.error('[AuthGate] Unexpected sign-in exception', error);
       setErrorMsg(error instanceof Error ? error.message : 'Unable to sign in.');
     } finally {
       setIsLoading(false);
@@ -151,10 +160,16 @@ export function AdminAccessGate({ isOpen, onClose, onAuthenticated }: AdminAcces
     try {
       const result = await signInWithGoogleAdminFallback();
       if (result.ok) {
+        console.info('[AuthGate] Temporary Google fallback sign-in succeeded', {
+          uid: result.user?.uid,
+        });
         setPassword('');
         setProviderNotEnabled(false);
         onAuthenticated();
       } else {
+        console.warn('[AuthGate] Temporary Google fallback failed', {
+          errorCode: result.errorCode || 'none',
+        });
         setErrorMsg(result.reason || 'Google sign-in failed.');
       }
     } finally {

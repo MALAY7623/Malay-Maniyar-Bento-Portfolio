@@ -19,7 +19,13 @@ import {
   DESIGN_PROJECTS,
   UGC_REELS,
 } from '../data/portfolioData';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import {
+  db,
+  ensureFreshAdminToken,
+  getFirebaseErrorCode,
+  handleFirestoreError,
+  OperationType,
+} from '../lib/firebase';
 import type {
   CapabilityItem,
   CustomSection,
@@ -38,6 +44,40 @@ import {
   sanitizeSiteConfig,
   sanitizeUgcReelPayload,
 } from '../utils/cmsUtils';
+
+/**
+ * Executes an admin Firestore mutation with automatic JWT freshness validation.
+ * If the cached Auth token has a stale `email_verified: false` claim (e.g. right
+ * after email verification), forces `getIdToken(true)` and retries cleanly once.
+ */
+async function runAdminWrite<T>(
+  operationType: OperationType,
+  path: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  await ensureFreshAdminToken(false);
+  try {
+    return await action();
+  } catch (error) {
+    const code = getFirebaseErrorCode(error);
+    const isPermissionError =
+      code === 'permission-denied' ||
+      (error instanceof Error && error.message.toLowerCase().includes('insufficient permissions'));
+
+    if (isPermissionError) {
+      const refreshed = await ensureFreshAdminToken(true);
+      if (refreshed) {
+        try {
+          return await action();
+        } catch (retryError) {
+          handleFirestoreError(retryError, operationType, path);
+        }
+      }
+    }
+
+    handleFirestoreError(error, operationType, path);
+  }
+}
 
 export function subscribeSiteConfig(
   onData: (config: SiteConfig | null) => void,
@@ -194,14 +234,12 @@ export function subscribeInquiries(
 export async function saveSiteConfig(config: SiteConfig): Promise<void> {
   const path = 'site_config/main';
   const clean = sanitizeSiteConfig(config);
-  try {
-    await setDoc(doc(db, 'site_config', 'main'), {
+  await runAdminWrite(OperationType.WRITE, path, () =>
+    setDoc(doc(db, 'site_config', 'main'), {
       ...clean,
       updatedAt: serverTimestamp(),
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+    }),
+  );
 }
 
 export async function saveUgcReel(
@@ -211,24 +249,18 @@ export async function saveUgcReel(
   const id = reel.id || createSlugId('reel', reel.title);
   const path = `ugc_reels/${id}`;
   const clean = sanitizeUgcReelPayload(reel, sortOrder);
-  try {
+  return runAdminWrite(OperationType.WRITE, path, async () => {
     await setDoc(doc(db, 'ugc_reels', id), {
       ...clean,
       updatedAt: serverTimestamp(),
     });
     return id;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  });
 }
 
 export async function deleteUgcReel(id: string): Promise<void> {
   const path = `ugc_reels/${id}`;
-  try {
-    await deleteDoc(doc(db, 'ugc_reels', id));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await runAdminWrite(OperationType.DELETE, path, () => deleteDoc(doc(db, 'ugc_reels', id)));
 }
 
 export async function saveDesignProject(
@@ -238,24 +270,20 @@ export async function saveDesignProject(
   const id = project.id || createSlugId('design', project.title);
   const path = `design_projects/${id}`;
   const clean = sanitizeDesignProjectPayload(project, sortOrder);
-  try {
+  return runAdminWrite(OperationType.WRITE, path, async () => {
     await setDoc(doc(db, 'design_projects', id), {
       ...clean,
       updatedAt: serverTimestamp(),
     });
     return id;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  });
 }
 
 export async function deleteDesignProject(id: string): Promise<void> {
   const path = `design_projects/${id}`;
-  try {
-    await deleteDoc(doc(db, 'design_projects', id));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await runAdminWrite(OperationType.DELETE, path, () =>
+    deleteDoc(doc(db, 'design_projects', id)),
+  );
 }
 
 export async function saveCapability(
@@ -265,24 +293,18 @@ export async function saveCapability(
   const id = cap.id || createSlugId('cap', cap.title);
   const path = `capabilities/${id}`;
   const clean = sanitizeCapabilityPayload(cap, sortOrder);
-  try {
+  return runAdminWrite(OperationType.WRITE, path, async () => {
     await setDoc(doc(db, 'capabilities', id), {
       ...clean,
       updatedAt: serverTimestamp(),
     });
     return id;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  });
 }
 
 export async function deleteCapability(id: string): Promise<void> {
   const path = `capabilities/${id}`;
-  try {
-    await deleteDoc(doc(db, 'capabilities', id));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await runAdminWrite(OperationType.DELETE, path, () => deleteDoc(doc(db, 'capabilities', id)));
 }
 
 export async function saveCustomSection(
@@ -292,24 +314,20 @@ export async function saveCustomSection(
   const id = section.id || createSlugId('section', section.heading);
   const path = `custom_sections/${id}`;
   const clean = sanitizeCustomSectionPayload(section, sortOrder);
-  try {
+  return runAdminWrite(OperationType.WRITE, path, async () => {
     await setDoc(doc(db, 'custom_sections', id), {
       ...clean,
       updatedAt: serverTimestamp(),
     });
     return id;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  });
 }
 
 export async function deleteCustomSection(id: string): Promise<void> {
   const path = `custom_sections/${id}`;
-  try {
-    await deleteDoc(doc(db, 'custom_sections', id));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await runAdminWrite(OperationType.DELETE, path, () =>
+    deleteDoc(doc(db, 'custom_sections', id)),
+  );
 }
 
 export async function submitProjectInquiry(data: InquiryFormData): Promise<string> {
@@ -332,20 +350,14 @@ export async function submitProjectInquiry(data: InquiryFormData): Promise<strin
 
 export async function updateInquiryStatus(id: string, status: InquiryStatus): Promise<void> {
   const path = `inquiries/${id}`;
-  try {
-    await updateDoc(doc(db, 'inquiries', id), { status });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
-  }
+  await runAdminWrite(OperationType.UPDATE, path, () =>
+    updateDoc(doc(db, 'inquiries', id), { status }),
+  );
 }
 
 export async function deleteInquiry(id: string): Promise<void> {
   const path = `inquiries/${id}`;
-  try {
-    await deleteDoc(doc(db, 'inquiries', id));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await runAdminWrite(OperationType.DELETE, path, () => deleteDoc(doc(db, 'inquiries', id)));
 }
 
 /**
@@ -353,7 +365,7 @@ export async function deleteInquiry(id: string): Promise<void> {
  */
 export async function seedDefaultPortfolioToCloud(): Promise<void> {
   const path = 'batch/seed';
-  try {
+  await runAdminWrite(OperationType.WRITE, path, async () => {
     const batch = writeBatch(db);
     batch.set(doc(db, 'site_config', 'main'), {
       ...sanitizeSiteConfig(DEFAULT_SITE_CONFIG),
@@ -379,7 +391,5 @@ export async function seedDefaultPortfolioToCloud(): Promise<void> {
       });
     });
     await batch.commit();
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  });
 }

@@ -109,6 +109,8 @@ interface ResilientImageProps {
   blurPlaceholder?: boolean;
   /** Optional accent hex color for the ambient placeholder underlay */
   placeholderColor?: string;
+  /** Marks above-the-fold hero imagery as high-priority eager LCP assets */
+  priority?: boolean;
 }
 
 /**
@@ -124,6 +126,7 @@ export function ResilientImage({
   style,
   blurPlaceholder = false,
   placeholderColor,
+  priority = false,
 }: ResilientImageProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [hasError, setHasError] = useState(false);
@@ -185,7 +188,9 @@ export function ResilientImage({
         onError={() => setHasError(true)}
         className={className}
         style={style}
-        loading="lazy"
+        loading={priority ? 'eager' : 'lazy'}
+        decoding="async"
+        fetchPriority={priority ? 'high' : 'auto'}
       />
     );
   }
@@ -222,7 +227,9 @@ export function ResilientImage({
           isLoaded ? 'opacity-100' : 'opacity-0 scale-[1.04]'
         }`}
         style={style}
-        loading="lazy"
+        loading={priority ? 'eager' : 'lazy'}
+        decoding="async"
+        fetchPriority={priority ? 'high' : 'auto'}
       />
 
       {/* CSS backdrop-filter blurred loading placeholder veil — fades out and unmounts cleanly once loaded */}

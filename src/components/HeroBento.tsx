@@ -137,6 +137,7 @@ export function HeroBento({
                         className="w-full h-full object-cover object-top grayscale contrast-110 transition-transform duration-500 group-hover/avatar:scale-105"
                         fallbackTitle={profile.name}
                         fallbackAccent={theme.lilacBackdrop}
+                        priority
                       />
                     </div>
                   </div>
@@ -288,6 +289,7 @@ export function HeroBento({
                   className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                   fallbackTitle={showreel.title}
                   fallbackAccent={theme.primaryAccent}
+                  priority
                 />
 
                 {/* Measured gradient scrim for crisp legibility */}
