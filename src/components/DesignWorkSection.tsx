@@ -134,7 +134,7 @@ function BeforeAfterSliderCard({ retouching }: { retouching: RetouchingConfig })
           {/* Crisp Before / After Scrim Labels */}
           <div
             aria-hidden="true"
-            className="absolute top-4 left-4 px-2.5 py-1 rounded-md bg-black/55 backdrop-blur-sm text-[11px] font-semibold text-white tracking-wide"
+            className="absolute top-4 left-4 px-2.5 py-1 rounded-md bg-black/72 text-[11px] font-semibold text-white tracking-wide"
           >
             Before · Raw Flat
           </div>
@@ -289,10 +289,12 @@ export function DesignWorkSection({
               className="w-full h-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04]"
               fallbackTitle={project.title}
               fallbackAccent={project.palette[0]?.hex || '#8A85E8'}
+              blurPlaceholder
+              placeholderColor={project.palette[0]?.hex || '#8A85E8'}
             />
             <div
               aria-hidden="true"
-              className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-white/85 dark:bg-[#121214]/85 backdrop-blur-sm text-[#111111] dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-sm"
+              className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-white/92 dark:bg-[#121214]/92 text-[#111111] dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-sm z-20"
             >
               <CornerBracket size={14} strokeWidth={2.2} />
             </div>
@@ -353,6 +355,7 @@ export function DesignWorkSection({
           </p>
           <h2
             id="design-work-heading"
+            data-gsap="section-heading"
             className="text-3xl sm:text-4xl font-extrabold tracking-[-0.035em] [text-wrap:balance]"
             style={{ color: 'var(--ink)' }}
           >

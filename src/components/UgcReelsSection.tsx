@@ -225,6 +225,7 @@ export function UgcReelsSection({ reels, sectionCopy, onSelectReel }: UgcReelsSe
               </p>
               <h2
                 id="ugc-reels-heading"
+                data-gsap="section-heading"
                 className="text-3xl sm:text-4xl font-extrabold tracking-[-0.035em] [text-wrap:balance]"
                 style={{ color: 'var(--ink)' }}
               >

@@ -21,6 +21,7 @@ import {
   sendAdminPasswordReset,
   setupAdminCredentials,
   signInWithAdminCredentials,
+  signInWithGoogleAdminFallback,
 } from '../lib/firebase';
 import { EDITORIAL_EASE, SMOOTH_SPRING } from '../utils/motionConfig';
 
@@ -126,11 +127,36 @@ export function AdminAccessGate({ isOpen, onClose, onAuthenticated }: AdminAcces
   const handlePasswordReset = async () => {
     setErrorMsg(null);
     setStatusMsg(null);
+    setProviderNotEnabled(false);
     setIsLoading(true);
     try {
       const res = await sendAdminPasswordReset(adminId);
-      if (res.ok) setStatusMsg(res.message);
-      else setErrorMsg(res.message);
+      if (res.ok) {
+        setStatusMsg(res.message);
+      } else {
+        if (res.providerNotEnabled) {
+          setProviderNotEnabled(true);
+        }
+        setErrorMsg(res.message);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTemporaryGoogleFallback = async () => {
+    setErrorMsg(null);
+    setStatusMsg(null);
+    setIsLoading(true);
+    try {
+      const result = await signInWithGoogleAdminFallback();
+      if (result.ok) {
+        setPassword('');
+        setProviderNotEnabled(false);
+        onAuthenticated();
+      } else {
+        setErrorMsg(result.reason || 'Google sign-in failed.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -212,21 +238,43 @@ export function AdminAccessGate({ isOpen, onClose, onAuthenticated }: AdminAcces
               {errorMsg && (
                 <div
                   role="alert"
+                  data-testid="admin-auth-alert"
                   className="rounded-2xl bg-[#FFF2F2] dark:bg-[#2F1518] border border-[#E5484D]/35 p-3.5 flex items-start gap-2.5 text-xs text-[#A31B1F] dark:text-[#FF9A9E]"
                 >
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-                  <div className="space-y-2">
-                    <p className="leading-relaxed">{errorMsg}</p>
+                  <div className="space-y-2.5 flex-1">
+                    <p className="leading-relaxed font-medium">{errorMsg}</p>
                     {providerNotEnabled && (
-                      <a
-                        href={FIREBASE_CONSOLE_AUTH_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 font-bold underline underline-offset-2"
+                      <div
+                        data-testid="provider-setup-guide"
+                        className="space-y-2.5 pt-2 border-t border-[#E5484D]/20"
                       >
-                        <span>Open Firebase Auth Providers</span>
-                        <ExternalLink className="w-3 h-3" aria-hidden="true" />
-                      </a>
+                        <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed opacity-95">
+                          <li>Open Firebase Console Authentication &rarr; Sign-in method.</li>
+                          <li>Click <strong>Email/Password</strong>, switch <strong>Enable</strong> ON, and save.</li>
+                          <li>Return here and click <strong>First-Time Setup</strong> to set your Admin password.</li>
+                        </ol>
+                        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                          <a
+                            href={FIREBASE_CONSOLE_AUTH_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#A31B1F] dark:bg-[#E5484D] text-white text-[11px] font-bold hover:opacity-90 transition-opacity"
+                          >
+                            <span>Open Firebase Auth Providers</span>
+                            <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                          </a>
+                          <button
+                            type="button"
+                            disabled={isLoading}
+                            onClick={handleTemporaryGoogleFallback}
+                            data-testid="temporary-google-signin-btn"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/80 dark:bg-white/10 border border-[#E5484D]/35 text-[#A31B1F] dark:text-[#FFD6D8] text-[11px] font-bold hover:bg-white dark:hover:bg-white/20 disabled:opacity-60 transition-colors cursor-pointer"
+                          >
+                            <span>Use Google Sign-In for Now</span>
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

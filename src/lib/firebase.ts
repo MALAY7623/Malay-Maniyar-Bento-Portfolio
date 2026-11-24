@@ -2,9 +2,11 @@ import { initializeApp } from 'firebase/app';
 import {
   createUserWithEmailAndPassword,
   getAuth,
+  GoogleAuthProvider,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   type User,
 } from 'firebase/auth';
@@ -312,7 +314,7 @@ export async function resendAdminVerificationEmail(): Promise<{ ok: boolean; mes
 
 export async function sendAdminPasswordReset(
   adminId: string,
-): Promise<{ ok: boolean; message: string }> {
+): Promise<{ ok: boolean; message: string; providerNotEnabled?: boolean }> {
   const resolvedEmail = resolveAuthorizedAdminEmail(
     adminId || PRIMARY_ADMIN_ID,
     PRIMARY_ADMIN_ID,
@@ -332,11 +334,48 @@ export async function sendAdminPasswordReset(
     if (code === 'auth/operation-not-allowed') {
       return {
         ok: false,
-        message: 'Enable Email/Password provider in Firebase Console before sending a reset link.',
+        providerNotEnabled: true,
+        message:
+          'Email/Password sign-in is currently turned off in Firebase Console. Enable it once to send a password setup link.',
       };
     }
     const message = error instanceof Error ? error.message : 'Could not send reset email.';
     return { ok: false, message };
+  }
+}
+
+/**
+ * Temporary fallback sign-in via Google (pre-enabled by Firebase provisioning)
+ * strictly for the authorized studio owner while Email/Password is still disabled
+ * in Firebase Console.
+ */
+export async function signInWithGoogleAdminFallback(): Promise<AdminAuthResult> {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+    if (!isAuthorizedAdminUser(user)) {
+      await signOut(auth);
+      return {
+        ok: false,
+        reason: `Access denied. Only the studio owner account (${PRIMARY_ADMIN_EMAIL}) is authorized.`,
+      };
+    }
+    return { ok: true, user };
+  } catch (error) {
+    const code = getFirebaseErrorCode(error);
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      return { ok: false, reason: 'Google sign-in popup was closed before completing.' };
+    }
+    if (code === 'auth/popup-blocked') {
+      return {
+        ok: false,
+        reason: 'Your browser blocked the sign-in popup. Allow popups for this site and try again.',
+      };
+    }
+    const message = error instanceof Error ? error.message : 'Unable to complete Google sign-in.';
+    return { ok: false, reason: message };
   }
 }
 

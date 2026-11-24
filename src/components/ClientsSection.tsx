@@ -1,6 +1,4 @@
-import { motion } from 'motion/react';
 import type { CapabilityItem } from '../types/portfolio';
-import { EDITORIAL_EASE, REVEAL_VIEWPORT } from '../utils/motionConfig';
 import { CornerBracket } from './BentoPrimitives';
 
 interface ClientsSectionProps {
@@ -16,17 +14,14 @@ export function ClientsSection({ capabilities }: ClientsSectionProps) {
       className="py-10 sm:py-14 outline-none theme-surface"
     >
       {/* 3-Column Creative Capabilities Bento Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 xl:gap-5">
+      <div data-gsap="spatial-group" className="grid grid-cols-1 md:grid-cols-3 gap-4 xl:gap-5">
         {capabilities.map((item, idx) => (
-          <motion.article
+          <article
             key={item.id || `${item.number}-${idx}`}
-            initial={{ opacity: 0, y: 18 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={REVEAL_VIEWPORT}
-            transition={{ duration: 0.55, delay: idx * 0.08, ease: EDITORIAL_EASE }}
+            data-gsap="spatial-card"
             data-cursor="bento"
             data-cursor-tone="neutral"
-            className="group rounded-[26px] border p-6 sm:p-7 flex flex-col justify-between gap-6 shadow-[0_6px_18px_rgba(17,17,17,0.03)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.35)] hover:-translate-y-0.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] theme-surface"
+            className="group rounded-[26px] border p-6 sm:p-7 flex flex-col justify-between gap-6 shadow-[0_6px_18px_rgba(17,17,17,0.03)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.35)] hover:-translate-y-1 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] theme-surface"
             style={{
               backgroundColor: 'var(--surface-card)',
               borderColor: 'var(--border-subtle)',
@@ -78,7 +73,7 @@ export function ClientsSection({ capabilities }: ClientsSectionProps) {
                 </li>
               ))}
             </ul>
-          </motion.article>
+          </article>
         ))}
       </div>
     </section>

@@ -167,12 +167,18 @@ export function HeroBento({
 
                 {/* Bold White Stacked Greeting */}
                 <div className="space-y-2.5 max-w-md">
-                  <h1 className="text-4xl sm:text-[2.85rem] xl:text-[3.15rem] font-extrabold tracking-[-0.035em] leading-[1.03] text-white [text-wrap:balance]">
+                  <h1
+                    data-gsap="hero-clip"
+                    className="text-4xl sm:text-[2.85rem] xl:text-[3.15rem] font-extrabold tracking-[-0.035em] leading-[1.03] text-white [text-wrap:balance]"
+                  >
                     {hero.greetingPrefix}
                     <br />
                     {profile.name}
                   </h1>
-                  <p className="text-base sm:text-lg font-medium text-white/90 tracking-[-0.01em]">
+                  <p
+                    data-gsap="hero-clip"
+                    className="text-base sm:text-lg font-medium text-white/90 tracking-[-0.01em]"
+                  >
                     {profile.role}
                   </p>
                 </div>
@@ -230,6 +236,7 @@ export function HeroBento({
           >
             <div className="flex items-start gap-2.5 sm:gap-4">
               <h2
+                data-gsap="hero-clip"
                 className="text-[3.25rem] sm:text-[4.5rem] xl:text-[5.25rem] font-extrabold tracking-[-0.045em] leading-[0.92] transition-colors duration-300"
                 style={{ color: 'var(--ink)' }}
               >

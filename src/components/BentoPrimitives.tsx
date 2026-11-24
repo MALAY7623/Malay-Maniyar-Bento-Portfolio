@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   motion,
   useAnimationFrame,
@@ -105,10 +105,15 @@ interface ResilientImageProps {
   fallbackTitle?: string;
   fallbackAccent?: string;
   style?: React.CSSProperties;
+  /** Enables a CSS backdrop-filter frosted blur placeholder while the image loads */
+  blurPlaceholder?: boolean;
+  /** Optional accent hex color for the ambient placeholder underlay */
+  placeholderColor?: string;
 }
 
 /**
- * Zero-Broken-Image resilient image wrapper with fallback surface.
+ * Zero-Broken-Image resilient image wrapper with fallback surface and optional
+ * CSS backdrop-filter blurred loading placeholder that fades out smoothly on load.
  */
 export function ResilientImage({
   src,
@@ -117,8 +122,40 @@ export function ResilientImage({
   fallbackTitle,
   fallbackAccent = '#8A85E8',
   style,
+  blurPlaceholder = false,
+  placeholderColor,
 }: ResilientImageProps) {
+  const imgRef = useRef<HTMLImageElement>(null);
   const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(!blurPlaceholder);
+  const [showPlaceholder, setShowPlaceholder] = useState(blurPlaceholder);
+
+  useEffect(() => {
+    setHasError(false);
+    if (!blurPlaceholder) {
+      setIsLoaded(true);
+      setShowPlaceholder(false);
+      return;
+    }
+
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setIsLoaded(true);
+      setShowPlaceholder(false);
+      return;
+    }
+
+    setIsLoaded(false);
+    setShowPlaceholder(true);
+  }, [src, blurPlaceholder]);
+
+  useEffect(() => {
+    if (!blurPlaceholder || !isLoaded || !showPlaceholder) return;
+    const timer = window.setTimeout(() => {
+      setShowPlaceholder(false);
+    }, 520);
+    return () => window.clearTimeout(timer);
+  }, [blurPlaceholder, isLoaded, showPlaceholder]);
 
   if (hasError || !src) {
     return (
@@ -138,16 +175,76 @@ export function ResilientImage({
     );
   }
 
+  if (!blurPlaceholder) {
+    return (
+      <img
+        ref={imgRef}
+        src={src}
+        alt={alt}
+        referrerPolicy="no-referrer"
+        onError={() => setHasError(true)}
+        className={className}
+        style={style}
+        loading="lazy"
+      />
+    );
+  }
+
+  const swatchHex = placeholderColor || fallbackAccent;
+
   return (
-    <img
-      src={src}
-      alt={alt}
-      referrerPolicy="no-referrer"
-      onError={() => setHasError(true)}
-      className={className}
-      style={style}
-      loading="lazy"
-    />
+    <div className="relative w-full h-full overflow-hidden">
+      {/* Soft ambient color underlay visible beneath the frosted backdrop-filter veil while loading */}
+      {showPlaceholder && (
+        <div
+          aria-hidden="true"
+          className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            isLoaded ? 'opacity-0' : 'opacity-100'
+          }`}
+          style={{
+            background: `radial-gradient(circle at 24% 28%, ${swatchHex}66 0%, transparent 62%), radial-gradient(circle at 78% 74%, color-mix(in srgb, var(--periwinkle) 36%, transparent) 0%, var(--surface-elevated) 78%)`,
+          }}
+        />
+      )}
+
+      <img
+        ref={imgRef}
+        src={src}
+        alt={alt}
+        referrerPolicy="no-referrer"
+        onLoad={() => setIsLoaded(true)}
+        onError={() => {
+          setHasError(true);
+          setIsLoaded(true);
+          setShowPlaceholder(false);
+        }}
+        className={`${className} transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          isLoaded ? 'opacity-100' : 'opacity-0 scale-[1.04]'
+        }`}
+        style={style}
+        loading="lazy"
+      />
+
+      {/* CSS backdrop-filter blurred loading placeholder veil — fades out and unmounts cleanly once loaded */}
+      {showPlaceholder && (
+        <div
+          aria-hidden="true"
+          data-testid="thumbnail-blur-placeholder"
+          data-loading={String(!isLoaded)}
+          onTransitionEnd={() => {
+            if (isLoaded) setShowPlaceholder(false);
+          }}
+          className={`absolute inset-0 z-10 pointer-events-none transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            isLoaded ? 'opacity-0' : 'opacity-100'
+          }`}
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--surface-card) 38%, transparent)',
+            backdropFilter: 'blur(22px) saturate(1.25)',
+            WebkitBackdropFilter: 'blur(22px) saturate(1.25)',
+          }}
+        />
+      )}
+    </div>
   );
 }
 

@@ -46,6 +46,7 @@ import {
   type ThemeMode,
 } from './utils/themeMode';
 import { SCROLL_PARALLAX_SPRING, SNAPPY_SPRING } from './utils/motionConfig';
+import { useGsapSectionMotion } from './utils/useGsapSectionMotion';
 import { VerticalNavRail } from './components/VerticalNavRail';
 import { HeroBento } from './components/HeroBento';
 import { UgcReelsSection } from './components/UgcReelsSection';
@@ -114,6 +115,7 @@ export default function App() {
   const [isStagePreview, setIsStagePreview] = useState(false);
   const [navAnnouncement, setNavAnnouncement] = useState('');
   const navScrollLockUntilRef = useRef(0);
+  const portfolioMainRef = useRef<HTMLElement>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'light';
     try {
@@ -413,6 +415,7 @@ export default function App() {
   };
 
   const isAdminPanelOpen = isAdmin && activeView === 'admin';
+  useGsapSectionMotion(portfolioMainRef, !isAdminPanelOpen);
 
   return (
     <MotionConfig reducedMotion="user">
@@ -478,7 +481,7 @@ export default function App() {
             />
 
           {/* Main Scrollable Content: Either Public Portfolio OR Admin Control Panel */}
-          <main className="flex-1 min-w-0 px-4 sm:px-7 lg:px-9 xl:px-11 pb-8">
+          <main ref={portfolioMainRef} className="flex-1 min-w-0 px-4 sm:px-7 lg:px-9 xl:px-11 pb-8">
             {isAdmin && activeView === 'admin' ? (
               <AdminDashboard
                 adminEmail={authUser?.email || ''}

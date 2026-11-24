@@ -31,9 +31,10 @@ export function AboutContactFooter({
       className="pt-10 pb-6 sm:pt-14 sm:pb-8 outline-none theme-surface"
     >
       {/* Split Bento Footer Card: Primary Accent + Obsidian Surface */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 xl:gap-5 items-stretch">
+      <div data-gsap="spatial-group" className="grid grid-cols-1 lg:grid-cols-12 gap-4 xl:gap-5 items-stretch">
         {/* Left Primary Accent Card: Bio & Philosophy */}
         <div
+          data-gsap="spatial-card"
           data-cursor="bento"
           data-cursor-tone="periwinkle"
           className="lg:col-span-6 rounded-[28px] text-white p-7 sm:p-9 flex flex-col justify-between gap-8"
@@ -49,6 +50,7 @@ export function AboutContactFooter({
 
             <h2
               id="contact-heading"
+              data-gsap="section-heading"
               className="text-3xl sm:text-4xl font-extrabold tracking-[-0.035em] leading-[1.08] [text-wrap:balance]"
             >
               {sectionCopy.footerAboutHeading}
@@ -67,6 +69,7 @@ export function AboutContactFooter({
 
         {/* Right Obsidian Card: Direct Contact Actions, Social Links & Start a Project */}
         <div
+          data-gsap="spatial-card"
           data-cursor="bento"
           data-cursor-tone="obsidian"
           className="lg:col-span-6 rounded-[28px] text-white p-7 sm:p-9 flex flex-col justify-between gap-8 border border-transparent dark:border-white/[0.1] theme-surface"
