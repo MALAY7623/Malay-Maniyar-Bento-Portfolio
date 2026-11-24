@@ -227,4 +227,6 @@ export interface InquiryValidationErrors {
 export interface SectionMetric {
   id: NavSectionId;
   offsetTop: number;
+  height?: number;
 }
+

@@ -114,3 +114,77 @@ export function computeActiveSection(
 
   return activeId;
 }
+
+export interface SectionReadingProgressParams {
+  scrollY: number;
+  viewportHeight: number;
+  documentHeight: number;
+  activeSection: NavSectionId;
+  sections: SectionMetric[];
+  viewportOffset?: number;
+}
+
+export interface SectionReadingProgressResult {
+  progress: number;
+  percent: number;
+}
+
+/**
+ * Compute reading depth (0..1 and 0..100%) within the currently active portfolio section.
+ * Aligns section handoff thresholds with computeActiveSection(scrollY, sections, viewportOffset)
+ * and smoothly reaches 100% when scrolled to the bottom of the document.
+ */
+export function computeSectionReadingProgress({
+  scrollY,
+  viewportHeight,
+  documentHeight,
+  activeSection,
+  sections,
+  viewportOffset = 220,
+}: SectionReadingProgressParams): SectionReadingProgressResult {
+  if (sections.length === 0) {
+    return { progress: 0, percent: 0 };
+  }
+
+  const safeScrollY = Number.isFinite(scrollY) ? Math.max(0, scrollY) : 0;
+  const safeViewportH = Number.isFinite(viewportHeight) ? Math.max(0, viewportHeight) : 0;
+  const safeDocumentH = Number.isFinite(documentHeight) ? Math.max(0, documentHeight) : 0;
+  const maxScrollY = Math.max(0, safeDocumentH - safeViewportH);
+
+  if (maxScrollY <= 0) {
+    return { progress: 0, percent: 0 };
+  }
+
+  const ordered = [...sections].sort((a, b) => a.offsetTop - b.offsetTop);
+  const activeIndex = ordered.findIndex((section) => section.id === activeSection);
+  if (activeIndex === -1) {
+    return { progress: 0, percent: 0 };
+  }
+
+  if (safeScrollY >= maxScrollY - 1) {
+    return { progress: 1, percent: 100 };
+  }
+
+  const currentSection = ordered[activeIndex];
+  const nextSection = activeIndex < ordered.length - 1 ? ordered[activeIndex + 1] : null;
+
+  const startScrollY =
+    activeIndex === 0 ? 0 : Math.max(0, currentSection.offsetTop - viewportOffset);
+
+  const rawEndScrollY = nextSection
+    ? Math.max(startScrollY + 1, nextSection.offsetTop - viewportOffset)
+    : Math.max(startScrollY + 1, maxScrollY);
+
+  const effectiveEndScrollY =
+    maxScrollY > startScrollY ? Math.min(rawEndScrollY, maxScrollY) : rawEndScrollY;
+
+  const span = Math.max(1, effectiveEndScrollY - startScrollY);
+  const rawProgress = (safeScrollY - startScrollY) / span;
+  const clamped = Math.min(1, Math.max(0, rawProgress));
+
+  return {
+    progress: clamped,
+    percent: Math.round(clamped * 100),
+  };
+}
+

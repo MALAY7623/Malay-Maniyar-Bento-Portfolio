@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   clampComparisonPercent,
   computeActiveSection,
+  computeSectionReadingProgress,
   filterDesignProjects,
   formatDuration,
   stepComparisonPercent,
@@ -240,5 +241,108 @@ test('cmsUtils enforces Firestore minimum string lengths on siteConfig and desig
   });
   assert.equal(safeDesign.year, '2026');
 });
+
+test('computeSectionReadingProgress tracks depth cleanly from 0% to 100% across sections and bottom bounds', () => {
+  const sections = [
+    { id: 'about' as const, offsetTop: 24, height: 876 },
+    { id: 'ugc-reels' as const, offsetTop: 900, height: 1300 },
+    { id: 'design-work' as const, offsetTop: 2200, height: 1400 },
+    { id: 'clients' as const, offsetTop: 3600, height: 700 },
+    { id: 'contact' as const, offsetTop: 4300, height: 650 },
+  ];
+  const viewportHeight = 900;
+  const documentHeight = 5000; // maxScrollY = 4100
+  const viewportOffset = 220;
+
+  // 1. Top of page starts at 0%
+  assert.deepEqual(
+    computeSectionReadingProgress({
+      scrollY: 0,
+      viewportHeight,
+      documentHeight,
+      activeSection: 'about',
+      sections,
+      viewportOffset,
+    }),
+    { progress: 0, percent: 0 },
+  );
+
+  // 2. Halfway through About section (about spans scrollY 0 -> 680)
+  const midAbout = computeSectionReadingProgress({
+    scrollY: 340,
+    viewportHeight,
+    documentHeight,
+    activeSection: 'about',
+    sections,
+    viewportOffset,
+  });
+  assert.equal(midAbout.percent, 50);
+
+  // 3. Exact handoff into UGC Reels (scrollY = 900 - 220 = 680) resets to 0%
+  const startUgc = computeSectionReadingProgress({
+    scrollY: 680,
+    viewportHeight,
+    documentHeight,
+    activeSection: 'ugc-reels',
+    sections,
+    viewportOffset,
+  });
+  assert.equal(startUgc.percent, 0);
+
+  // 4. Mid UGC Reels (spans scrollY 680 -> 1980, midpoint = 1330)
+  const midUgc = computeSectionReadingProgress({
+    scrollY: 1330,
+    viewportHeight,
+    documentHeight,
+    activeSection: 'ugc-reels',
+    sections,
+    viewportOffset,
+  });
+  assert.equal(midUgc.percent, 50);
+
+  // 5. Reaches 100% cleanly at bottom of document on shorter final section
+  const bottomContact = computeSectionReadingProgress({
+    scrollY: 4100,
+    viewportHeight,
+    documentHeight,
+    activeSection: 'contact',
+    sections,
+    viewportOffset,
+  });
+  assert.deepEqual(bottomContact, { progress: 1, percent: 100 });
+
+  // 6. Edge cases: empty sections, non-scrollable page, negative overscroll
+  assert.deepEqual(
+    computeSectionReadingProgress({
+      scrollY: 100,
+      viewportHeight,
+      documentHeight,
+      activeSection: 'about',
+      sections: [],
+    }),
+    { progress: 0, percent: 0 },
+  );
+  assert.deepEqual(
+    computeSectionReadingProgress({
+      scrollY: 0,
+      viewportHeight: 900,
+      documentHeight: 800,
+      activeSection: 'about',
+      sections,
+    }),
+    { progress: 0, percent: 0 },
+  );
+  assert.deepEqual(
+    computeSectionReadingProgress({
+      scrollY: -45,
+      viewportHeight,
+      documentHeight,
+      activeSection: 'about',
+      sections,
+    }),
+    { progress: 0, percent: 0 },
+  );
+});
+
 
 

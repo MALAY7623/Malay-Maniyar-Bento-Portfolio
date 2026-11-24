@@ -33,7 +33,10 @@ import type {
   SiteConfig,
   UgcReel,
 } from './types/portfolio';
-import { computeActiveSection } from './utils/portfolioLogic';
+import {
+  computeActiveSection,
+  computeSectionReadingProgress,
+} from './utils/portfolioLogic';
 import {
   resolveSectionByArrowKey,
   shouldHandleGlobalArrowNavigation,
@@ -123,6 +126,7 @@ export default function App() {
   const isUsingCloudDefaults = !cloudSiteConfig;
 
   const [activeSection, setActiveSection] = useState<NavSectionId>('about');
+  const [sectionProgress, setSectionProgress] = useState(0);
   const [activeDesignCategory, setActiveDesignCategory] = useState<DesignCategory>('All Projects');
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [activeReel, setActiveReel] = useState<UgcReel | null>(null);
@@ -272,32 +276,72 @@ export default function App() {
     setThemeMode((prev) => toggleThemeMode(prev));
   }, []);
 
-  // Dynamically highlight active vertical nav link on scroll
+  // Dynamically highlight active vertical nav link and compute current-section reading depth on scroll
   useEffect(() => {
     if (activeView !== 'portfolio') return;
 
-    const updateActiveSection = () => {
-      if (performance.now() < navScrollLockUntilRef.current) {
-        return;
-      }
+    let rafId = 0;
+
+    const measureScrollState = () => {
+      rafId = 0;
       const metrics = TRACKED_SECTIONS.map((id) => {
         const el = document.getElementById(id);
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
         return {
           id,
-          offsetTop: el ? el.getBoundingClientRect().top + window.scrollY : Number.MAX_SAFE_INTEGER,
+          offsetTop: rect.top + window.scrollY,
+          height: rect.height,
         };
-      }).filter((item) => item.offsetTop < Number.MAX_SAFE_INTEGER);
+      }).filter((item): item is { id: NavSectionId; offsetTop: number; height: number } => item !== null);
 
-      const nextActive = computeActiveSection(window.scrollY, metrics, 220);
-      setActiveSection(nextActive);
+      const documentHeight = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      );
+      const viewportHeight = window.innerHeight;
+      const maxScrollY = Math.max(0, documentHeight - viewportHeight);
+      const isScrollLocked = performance.now() < navScrollLockUntilRef.current;
+
+      let resolvedSection = computeActiveSection(window.scrollY, metrics, 220);
+
+      // When scrolled all the way to the bottom on tall viewports where the final footer section
+      // is shorter than (viewportHeight - 220px), resolve cleanly to the final section.
+      if (maxScrollY > 0 && window.scrollY >= maxScrollY - 2 && metrics.length > 0) {
+        resolvedSection = metrics[metrics.length - 1].id;
+      }
+
+      if (!isScrollLocked) {
+        setActiveSection((prev) => (prev === resolvedSection ? prev : resolvedSection));
+      }
+
+      const { percent } = computeSectionReadingProgress({
+        scrollY: window.scrollY,
+        viewportHeight,
+        documentHeight,
+        activeSection: resolvedSection,
+        sections: metrics,
+        viewportOffset: 220,
+      });
+
+      const quantizedProgress = percent / 100;
+      setSectionProgress((prev) => (prev === quantizedProgress ? prev : quantizedProgress));
     };
 
-    updateActiveSection();
-    window.addEventListener('scroll', updateActiveSection, { passive: true });
-    window.addEventListener('resize', updateActiveSection, { passive: true });
+    const scheduleMeasure = () => {
+      if (rafId !== 0) return;
+      rafId = window.requestAnimationFrame(measureScrollState);
+    };
+
+    measureScrollState();
+    window.addEventListener('scroll', scheduleMeasure, { passive: true });
+    window.addEventListener('resize', scheduleMeasure, { passive: true });
     return () => {
-      window.removeEventListener('scroll', updateActiveSection);
-      window.removeEventListener('resize', updateActiveSection);
+      if (rafId !== 0) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener('scroll', scheduleMeasure);
+      window.removeEventListener('resize', scheduleMeasure);
     };
   }, [activeView]);
 
@@ -305,6 +349,7 @@ export default function App() {
     (sectionId: NavSectionId) => {
       navScrollLockUntilRef.current = performance.now() + 720;
       setActiveSection(sectionId);
+      setSectionProgress(0);
       if (activeView !== 'portfolio') {
         setActiveView('portfolio');
         clearAdminHash();
@@ -521,6 +566,7 @@ export default function App() {
             {/* Left Sticky Vertical Navigation Rail (Desktop) + Compact Top Header (Mobile) */}
             <VerticalNavRail
               activeSection={activeSection}
+              sectionProgress={sectionProgress}
               onNavigate={handleNavigate}
               brandName={siteConfig.profile.name}
               isAdmin={isAdmin}

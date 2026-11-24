@@ -7,6 +7,7 @@ import { EDITORIAL_EASE, SNAPPY_SPRING } from '../utils/motionConfig';
 
 interface VerticalNavRailProps {
   activeSection: NavSectionId;
+  sectionProgress: number;
   onNavigate: (sectionId: NavSectionId) => void;
   brandName: string;
   isAdmin: boolean;
@@ -23,6 +24,85 @@ const NAV_ITEMS: { id: NavSectionId; label: string; isBrandTop?: boolean }[] = [
   { id: 'ugc-reels', label: 'UGC Reels' },
   { id: 'clients', label: 'Clients' },
 ];
+
+const NAV_SECTION_LABELS: Record<NavSectionId, string> = {
+  about: 'About Me',
+  'ugc-reels': 'UGC Reels',
+  'design-work': 'Design Work',
+  clients: 'Clients',
+  contact: 'Contact',
+};
+
+const RING_SIZE = 36;
+const RING_STROKE = 2;
+const RING_RADIUS = (RING_SIZE - RING_STROKE * 2) / 2 - 1;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function SectionReadingProgressRing({
+  activeSection,
+  progress,
+}: {
+  activeSection: NavSectionId;
+  progress: number;
+}) {
+  const clamped = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
+  const percent = Math.round(clamped * 100);
+  const dashOffset = RING_CIRCUMFERENCE * (1 - clamped);
+  const sectionLabel = NAV_SECTION_LABELS[activeSection] ?? 'Portfolio';
+
+  return (
+    <div
+      role="progressbar"
+      aria-label="Current section reading progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent}
+      aria-valuetext={`${sectionLabel}: ${percent}%`}
+      data-testid="section-reading-progress"
+      data-section={activeSection}
+      data-progress={percent}
+      title={`${sectionLabel} · ${percent}% read`}
+      className="relative flex items-center justify-center w-9 h-9 select-none"
+    >
+      <svg
+        width={RING_SIZE}
+        height={RING_SIZE}
+        viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+        className="block overflow-visible"
+        aria-hidden="true"
+      >
+        <circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          fill="none"
+          stroke="var(--border-strong)"
+          strokeWidth={1.5}
+          opacity={0.75}
+        />
+        <circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          fill="none"
+          stroke="var(--periwinkle)"
+          strokeWidth={RING_STROKE}
+          strokeLinecap="round"
+          strokeDasharray={RING_CIRCUMFERENCE}
+          strokeDashoffset={dashOffset}
+          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+          className="transition-[stroke-dashoffset] duration-150 ease-out motion-reduce:transition-none"
+        />
+      </svg>
+      <span
+        className="absolute inset-0 flex items-center justify-center font-mono text-[8.5px] font-medium tabular-nums tracking-tight leading-none"
+        style={{ color: 'var(--ink-muted)' }}
+      >
+        {percent}%
+      </span>
+    </div>
+  );
+}
 
 function ThemeToggleButton({
   themeMode,
@@ -85,6 +165,7 @@ function ThemeToggleButton({
 
 export function VerticalNavRail({
   activeSection,
+  sectionProgress,
   onNavigate,
   brandName,
   isAdmin,
@@ -189,8 +270,8 @@ export function VerticalNavRail({
           )}
         </nav>
 
-        {/* Bottom Utility Stack: Light/Dark Theme Toggle + Geometric Year Marker */}
-        <div className="flex flex-col items-center gap-4">
+        {/* Bottom Utility Stack: Light/Dark Theme Toggle, Year Marker, and Section Reading Progress Ring */}
+        <div className="flex flex-col items-center gap-3.5">
           <ThemeToggleButton
             themeMode={themeMode}
             onToggle={onToggleTheme}
@@ -202,12 +283,19 @@ export function VerticalNavRail({
           >
             2026
           </span>
+          {activeView === 'portfolio' && (
+            <SectionReadingProgressRing
+              activeSection={activeSection}
+              progress={sectionProgress}
+            />
+          )}
         </div>
       </aside>
 
       {/* Mobile Compact Sticky Top Navigation (<= 52px height, under 15% mobile viewport cap) */}
       <MobileCompactHeader
         activeSection={activeSection}
+        sectionProgress={sectionProgress}
         onNavigate={onNavigate}
         brandName={brandName}
         isAdmin={isAdmin}
