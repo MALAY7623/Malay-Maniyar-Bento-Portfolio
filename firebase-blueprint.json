@@ -1,0 +1,408 @@
+{
+  "entities": {
+    "SiteConfig": {
+      "title": "SiteConfig",
+      "description": "Global portfolio configuration including theme color palette, profile, hero copy, featured showreel, section copy, and retouching showcase.",
+      "type": "object",
+      "properties": {
+        "theme": {
+          "type": "object",
+          "description": "Hex color palette tokens applied dynamically across the portfolio."
+        },
+        "profile": {
+          "type": "object",
+          "description": "Creator identity, contact details, portrait image URL, and social links."
+        },
+        "hero": {
+          "type": "object",
+          "description": "Editable Hero bento card headings, subtitles, and labels."
+        },
+        "showreel": {
+          "type": "object",
+          "description": "Hero featured showreel cover, video URL, and editorial breakdown."
+        },
+        "sections": {
+          "type": "object",
+          "description": "Section eyebrows, headings, descriptions, and footer bio/contact copy."
+        },
+        "retouching": {
+          "type": "object",
+          "description": "Before/After interactive retouching study metadata and image."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest update."
+        }
+      },
+      "required": ["theme", "profile", "hero", "showreel", "sections", "retouching", "updatedAt"]
+    },
+    "UgcReel": {
+      "title": "UgcReel",
+      "description": "9:16 vertical short-form UGC video reel entry.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "client": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["Instagram Reels", "YouTube Shorts", "Ad Creative"]
+        },
+        "durationSeconds": {
+          "type": "number"
+        },
+        "aspectRatio": {
+          "type": "string",
+          "enum": ["9:16", "16:9"]
+        },
+        "thumbnailUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 260000
+        },
+        "videoUrl": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "accentColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "hookLine": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "campaignBrief": {
+          "type": "string",
+          "maxLength": 1200
+        },
+        "hookStrategy": {
+          "type": "string",
+          "maxLength": 1200
+        },
+        "editingBreakdown": {
+          "type": "array"
+        },
+        "deliverables": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "sortOrder": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "title",
+        "client",
+        "platform",
+        "durationSeconds",
+        "aspectRatio",
+        "thumbnailUrl",
+        "videoUrl",
+        "accentColor",
+        "hookLine",
+        "campaignBrief",
+        "hookStrategy",
+        "editingBreakdown",
+        "deliverables",
+        "sortOrder",
+        "updatedAt"
+      ]
+    },
+    "DesignProject": {
+      "title": "DesignProject",
+      "description": "Design portfolio gallery item with color swatches and rationale.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Brand Identity",
+            "Posters & Campaigns",
+            "Digital E-Books",
+            "AI Visuals & Portraits"
+          ]
+        },
+        "year": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 12
+        },
+        "client": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 260000
+        },
+        "aspectClass": {
+          "type": "string",
+          "enum": ["aspect-[4/3]", "aspect-[3/4]", "aspect-[16/10]", "aspect-square"]
+        },
+        "palette": {
+          "type": "array"
+        },
+        "tools": {
+          "type": "array"
+        },
+        "rationale": {
+          "type": "string",
+          "maxLength": 1400
+        },
+        "deliverables": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "sortOrder": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "title",
+        "subtitle",
+        "category",
+        "year",
+        "client",
+        "imageUrl",
+        "aspectClass",
+        "palette",
+        "tools",
+        "rationale",
+        "deliverables",
+        "sortOrder",
+        "updatedAt"
+      ]
+    },
+    "Capability": {
+      "title": "Capability",
+      "description": "Creative service capability bento card.",
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 6
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "deliverables": {
+          "type": "array"
+        },
+        "accentBg": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "accentText": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "sortOrder": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "number",
+        "title",
+        "summary",
+        "deliverables",
+        "accentBg",
+        "accentText",
+        "sortOrder",
+        "updatedAt"
+      ]
+    },
+    "CustomSection": {
+      "title": "CustomSection",
+      "description": "Admin-added structured responsive section rendered on mobile and desktop viewports.",
+      "type": "object",
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": ["feature-banner", "bento-cards", "media-spotlight", "editorial-quote"]
+        },
+        "placement": {
+          "type": "string",
+          "enum": ["after-hero", "after-ugc", "after-design", "after-capabilities"]
+        },
+        "accentTheme": {
+          "type": "string",
+          "enum": ["white", "periwinkle", "mint", "apricot", "charcoal"]
+        },
+        "eyebrow": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "heading": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 260000
+        },
+        "ctaLabel": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "ctaUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "items": {
+          "type": "array"
+        },
+        "isVisible": {
+          "type": "boolean"
+        },
+        "sortOrder": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "layout",
+        "placement",
+        "accentTheme",
+        "eyebrow",
+        "heading",
+        "body",
+        "imageUrl",
+        "ctaLabel",
+        "ctaUrl",
+        "items",
+        "isVisible",
+        "sortOrder",
+        "updatedAt"
+      ]
+    },
+    "ProjectInquiry": {
+      "title": "ProjectInquiry",
+      "description": "Visitor-submitted project inquiry stored privately for admin review.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 5,
+          "maxLength": 180
+        },
+        "projectType": {
+          "type": "string",
+          "enum": ["UGC Video", "Graphic Design", "Both"]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 2000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["new", "reviewed", "replied"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["name", "email", "projectType", "message", "status", "createdAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Trusted server-managed admin registry document.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 180
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/site_config/{configId}": {
+      "schema": { "$ref": "#/entities/SiteConfig" },
+      "description": "Global site configuration document (`main`) holding theme colors, profile, hero, showreel, section copy, and retouching showcase."
+    },
+    "/ugc_reels/{reelId}": {
+      "schema": { "$ref": "#/entities/UgcReel" },
+      "description": "Publicly readable, admin-managed 9:16 UGC video reels."
+    },
+    "/design_projects/{projectId}": {
+      "schema": { "$ref": "#/entities/DesignProject" },
+      "description": "Publicly readable, admin-managed design gallery artworks."
+    },
+    "/capabilities/{capabilityId}": {
+      "schema": { "$ref": "#/entities/Capability" },
+      "description": "Publicly readable, admin-managed creative capability cards."
+    },
+    "/custom_sections/{sectionId}": {
+      "schema": { "$ref": "#/entities/CustomSection" },
+      "description": "Publicly readable, admin-managed structured responsive custom content blocks."
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": { "$ref": "#/entities/ProjectInquiry" },
+      "description": "PII-isolated visitor project inquiries; public create only, admin-only read/update/delete."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Protected admin registry; no client writes permitted."
+    }
+  }
+}

@@ -1,0 +1,433 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // GLOBAL HARDENED PRIMITIVES
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Bootstrapped primary admin (strictly email_verified == true) OR server-provisioned /admins/{uid}
+    function isPrimaryAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'malaymaniyar2020@gmail.com';
+    }
+
+    function isAdmin() {
+      return isPrimaryAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isHexColor(val) {
+      return val is string && val.size() == 7 && val.matches('^#[0-9A-Fa-f]{6}$');
+    }
+
+    function isBoundedString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isStringList(val, maxItems) {
+      return val is list &&
+        val.size() <= maxItems &&
+        (val.size() == 0 || (val[0] is string && val[0].size() <= 300));
+    }
+
+    // =========================================================================
+    // ENTITY VALIDATION BLUEPRINTS (Anti-Update-Gap)
+    // =========================================================================
+    function isValidThemeMap(t) {
+      return t is map &&
+        t.keys().hasAll([
+          'canvasBg', 'workspaceBg', 'primaryAccent', 'secondaryAccent',
+          'highlightAccent', 'darkSurface', 'obsidianSurface', 'lilacBackdrop'
+        ]) &&
+        t.keys().hasOnly([
+          'canvasBg', 'workspaceBg', 'primaryAccent', 'secondaryAccent',
+          'highlightAccent', 'darkSurface', 'obsidianSurface', 'lilacBackdrop'
+        ]) &&
+        isHexColor(t.canvasBg) &&
+        isHexColor(t.workspaceBg) &&
+        isHexColor(t.primaryAccent) &&
+        isHexColor(t.secondaryAccent) &&
+        isHexColor(t.highlightAccent) &&
+        isHexColor(t.darkSurface) &&
+        isHexColor(t.obsidianSurface) &&
+        isHexColor(t.lilacBackdrop);
+    }
+
+    function isValidProfileMap(p) {
+      return p is map &&
+        p.keys().hasAll([
+          'name', 'role', 'email', 'phoneDisplay', 'whatsappUrl',
+          'location', 'availability', 'portraitUrl',
+          'instagramUrl', 'behanceUrl', 'gumroadUrl'
+        ]) &&
+        p.keys().hasOnly([
+          'name', 'role', 'email', 'phoneDisplay', 'whatsappUrl',
+          'location', 'availability', 'portraitUrl',
+          'instagramUrl', 'behanceUrl', 'gumroadUrl'
+        ]) &&
+        isBoundedString(p.name, 1, 100) &&
+        isBoundedString(p.role, 1, 140) &&
+        isBoundedString(p.email, 5, 180) &&
+        isBoundedString(p.phoneDisplay, 3, 40) &&
+        isBoundedString(p.whatsappUrl, 0, 300) &&
+        isBoundedString(p.location, 0, 120) &&
+        isBoundedString(p.availability, 0, 160) &&
+        isBoundedString(p.portraitUrl, 0, 260000) &&
+        isBoundedString(p.instagramUrl, 0, 300) &&
+        isBoundedString(p.behanceUrl, 0, 300) &&
+        isBoundedString(p.gumroadUrl, 0, 300);
+    }
+
+    function isValidHeroMap(h) {
+      return h is map &&
+        h.keys().hasAll([
+          'greetingPrefix', 'displayTitle', 'worksLabel', 'worksSublabel',
+          'showreelLabel', 'ugcTileEyebrow', 'ugcTileTitle', 'ugcTileSubtitle',
+          'brandTileEyebrow', 'brandTileTitle', 'brandTileSubtitle',
+          'clientsTileTitle', 'clientsTileSubtitle',
+          'aiTileEyebrow', 'aiTileTitle', 'aiTileSubtitle'
+        ]) &&
+        h.keys().hasOnly([
+          'greetingPrefix', 'displayTitle', 'worksLabel', 'worksSublabel',
+          'showreelLabel', 'ugcTileEyebrow', 'ugcTileTitle', 'ugcTileSubtitle',
+          'brandTileEyebrow', 'brandTileTitle', 'brandTileSubtitle',
+          'clientsTileTitle', 'clientsTileSubtitle',
+          'aiTileEyebrow', 'aiTileTitle', 'aiTileSubtitle'
+        ]) &&
+        isBoundedString(h.greetingPrefix, 1, 40) &&
+        isBoundedString(h.displayTitle, 1, 60) &&
+        isBoundedString(h.worksLabel, 0, 80) &&
+        isBoundedString(h.worksSublabel, 0, 120) &&
+        isBoundedString(h.showreelLabel, 1, 80) &&
+        isBoundedString(h.ugcTileEyebrow, 0, 60) &&
+        isBoundedString(h.ugcTileTitle, 1, 80) &&
+        isBoundedString(h.ugcTileSubtitle, 0, 120) &&
+        isBoundedString(h.brandTileEyebrow, 0, 60) &&
+        isBoundedString(h.brandTileTitle, 1, 80) &&
+        isBoundedString(h.brandTileSubtitle, 0, 120) &&
+        isBoundedString(h.clientsTileTitle, 1, 80) &&
+        isBoundedString(h.clientsTileSubtitle, 0, 120) &&
+        isBoundedString(h.aiTileEyebrow, 0, 60) &&
+        isBoundedString(h.aiTileTitle, 1, 80) &&
+        isBoundedString(h.aiTileSubtitle, 0, 120);
+    }
+
+    function isValidShowreelMap(s) {
+      return s is map &&
+        s.keys().hasAll([
+          'title', 'client', 'durationSeconds', 'thumbnailUrl', 'videoUrl',
+          'hookLine', 'campaignBrief', 'hookStrategy', 'editingBreakdown', 'deliverables'
+        ]) &&
+        s.keys().hasOnly([
+          'title', 'client', 'durationSeconds', 'thumbnailUrl', 'videoUrl',
+          'hookLine', 'campaignBrief', 'hookStrategy', 'editingBreakdown', 'deliverables'
+        ]) &&
+        isBoundedString(s.title, 1, 140) &&
+        isBoundedString(s.client, 1, 100) &&
+        s.durationSeconds is number && s.durationSeconds >= 1 && s.durationSeconds <= 600 &&
+        isBoundedString(s.thumbnailUrl, 0, 260000) &&
+        isBoundedString(s.videoUrl, 0, 2000) &&
+        isBoundedString(s.hookLine, 0, 240) &&
+        isBoundedString(s.campaignBrief, 0, 1200) &&
+        isBoundedString(s.hookStrategy, 0, 1200) &&
+        isStringList(s.editingBreakdown, 10) &&
+        isBoundedString(s.deliverables, 0, 300);
+    }
+
+    function isValidSectionsMap(sec) {
+      return sec is map &&
+        sec.keys().hasAll([
+          'ugcEyebrow', 'ugcHeading', 'ugcDescription',
+          'designEyebrow', 'designHeading', 'designDescription',
+          'footerAboutEyebrow', 'footerAboutHeading', 'footerAboutBio',
+          'footerContactEyebrow', 'footerContactHeading',
+          'copyrightText', 'footerTagline'
+        ]) &&
+        sec.keys().hasOnly([
+          'ugcEyebrow', 'ugcHeading', 'ugcDescription',
+          'designEyebrow', 'designHeading', 'designDescription',
+          'footerAboutEyebrow', 'footerAboutHeading', 'footerAboutBio',
+          'footerContactEyebrow', 'footerContactHeading',
+          'copyrightText', 'footerTagline'
+        ]) &&
+        isBoundedString(sec.ugcEyebrow, 0, 100) &&
+        isBoundedString(sec.ugcHeading, 1, 120) &&
+        isBoundedString(sec.ugcDescription, 0, 500) &&
+        isBoundedString(sec.designEyebrow, 0, 100) &&
+        isBoundedString(sec.designHeading, 1, 120) &&
+        isBoundedString(sec.designDescription, 0, 500) &&
+        isBoundedString(sec.footerAboutEyebrow, 0, 100) &&
+        isBoundedString(sec.footerAboutHeading, 1, 160) &&
+        isBoundedString(sec.footerAboutBio, 0, 1200) &&
+        isBoundedString(sec.footerContactEyebrow, 0, 100) &&
+        isBoundedString(sec.footerContactHeading, 1, 160) &&
+        isBoundedString(sec.copyrightText, 0, 180) &&
+        isBoundedString(sec.footerTagline, 0, 180);
+    }
+
+    function isValidRetouchingMap(r) {
+      return r is map &&
+        r.keys().hasAll(['title', 'subtitle', 'imageUrl', 'workflowSummary', 'toolsSummary']) &&
+        r.keys().hasOnly(['title', 'subtitle', 'imageUrl', 'workflowSummary', 'toolsSummary']) &&
+        isBoundedString(r.title, 1, 140) &&
+        isBoundedString(r.subtitle, 0, 400) &&
+        isBoundedString(r.imageUrl, 0, 260000) &&
+        isBoundedString(r.workflowSummary, 0, 240) &&
+        isBoundedString(r.toolsSummary, 0, 180);
+    }
+
+    function isValidSiteConfig(data) {
+      return data.keys().hasAll([
+          'theme', 'profile', 'hero', 'showreel', 'sections', 'retouching', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'theme', 'profile', 'hero', 'showreel', 'sections', 'retouching', 'updatedAt'
+        ]) &&
+        isValidThemeMap(data.theme) &&
+        isValidProfileMap(data.profile) &&
+        isValidHeroMap(data.hero) &&
+        isValidShowreelMap(data.showreel) &&
+        isValidSectionsMap(data.sections) &&
+        isValidRetouchingMap(data.retouching) &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidUgcReel(data) {
+      return data.keys().hasAll([
+          'title', 'client', 'platform', 'durationSeconds', 'aspectRatio',
+          'thumbnailUrl', 'videoUrl', 'accentColor', 'hookLine',
+          'campaignBrief', 'hookStrategy', 'editingBreakdown',
+          'deliverables', 'sortOrder', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'client', 'platform', 'durationSeconds', 'aspectRatio',
+          'thumbnailUrl', 'videoUrl', 'accentColor', 'hookLine',
+          'campaignBrief', 'hookStrategy', 'editingBreakdown',
+          'deliverables', 'sortOrder', 'updatedAt'
+        ]) &&
+        isBoundedString(data.title, 1, 140) &&
+        isBoundedString(data.client, 1, 100) &&
+        data.platform in ['Instagram Reels', 'YouTube Shorts', 'Ad Creative'] &&
+        data.durationSeconds is number && data.durationSeconds >= 1 && data.durationSeconds <= 600 &&
+        data.aspectRatio in ['9:16', '16:9'] &&
+        isBoundedString(data.thumbnailUrl, 1, 260000) &&
+        isBoundedString(data.videoUrl, 0, 2000) &&
+        isHexColor(data.accentColor) &&
+        isBoundedString(data.hookLine, 0, 240) &&
+        isBoundedString(data.campaignBrief, 0, 1200) &&
+        isBoundedString(data.hookStrategy, 0, 1200) &&
+        isStringList(data.editingBreakdown, 10) &&
+        isBoundedString(data.deliverables, 0, 300) &&
+        data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidDesignProject(data) {
+      return data.keys().hasAll([
+          'title', 'subtitle', 'category', 'year', 'client',
+          'imageUrl', 'aspectClass', 'palette', 'tools',
+          'rationale', 'deliverables', 'sortOrder', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'subtitle', 'category', 'year', 'client',
+          'imageUrl', 'aspectClass', 'palette', 'tools',
+          'rationale', 'deliverables', 'sortOrder', 'updatedAt'
+        ]) &&
+        isBoundedString(data.title, 1, 140) &&
+        isBoundedString(data.subtitle, 0, 240) &&
+        data.category in [
+          'Brand Identity', 'Posters & Campaigns',
+          'Digital E-Books', 'AI Visuals & Portraits'
+        ] &&
+        isBoundedString(data.year, 4, 12) &&
+        isBoundedString(data.client, 0, 100) &&
+        isBoundedString(data.imageUrl, 1, 260000) &&
+        data.aspectClass in ['aspect-[4/3]', 'aspect-[3/4]', 'aspect-[16/10]', 'aspect-square'] &&
+        data.palette is list && data.palette.size() <= 6 &&
+        (data.palette.size() == 0 || (data.palette[0] is map && data.palette[0].keys().hasOnly(['name', 'hex']))) &&
+        isStringList(data.tools, 8) &&
+        isBoundedString(data.rationale, 0, 1400) &&
+        isBoundedString(data.deliverables, 0, 300) &&
+        data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidCapability(data) {
+      return data.keys().hasAll([
+          'number', 'title', 'summary', 'deliverables',
+          'accentBg', 'accentText', 'sortOrder', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'number', 'title', 'summary', 'deliverables',
+          'accentBg', 'accentText', 'sortOrder', 'updatedAt'
+        ]) &&
+        isBoundedString(data.number, 1, 6) &&
+        isBoundedString(data.title, 1, 120) &&
+        isBoundedString(data.summary, 0, 600) &&
+        isStringList(data.deliverables, 8) &&
+        isHexColor(data.accentBg) &&
+        isHexColor(data.accentText) &&
+        data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidCustomSection(data) {
+      return data.keys().hasAll([
+          'layout', 'placement', 'accentTheme', 'eyebrow', 'heading', 'body',
+          'imageUrl', 'ctaLabel', 'ctaUrl', 'items', 'isVisible', 'sortOrder', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'layout', 'placement', 'accentTheme', 'eyebrow', 'heading', 'body',
+          'imageUrl', 'ctaLabel', 'ctaUrl', 'items', 'isVisible', 'sortOrder', 'updatedAt'
+        ]) &&
+        data.layout in ['feature-banner', 'bento-cards', 'media-spotlight', 'editorial-quote'] &&
+        data.placement in ['after-hero', 'after-ugc', 'after-design', 'after-capabilities'] &&
+        data.accentTheme in ['white', 'periwinkle', 'mint', 'apricot', 'charcoal'] &&
+        isBoundedString(data.eyebrow, 0, 100) &&
+        isBoundedString(data.heading, 1, 160) &&
+        isBoundedString(data.body, 0, 2000) &&
+        isBoundedString(data.imageUrl, 0, 260000) &&
+        isBoundedString(data.ctaLabel, 0, 60) &&
+        isBoundedString(data.ctaUrl, 0, 500) &&
+        data.items is list && data.items.size() <= 6 &&
+        (data.items.size() == 0 || (
+          data.items[0] is map &&
+          data.items[0].keys().hasOnly(['title', 'description', 'imageUrl', 'badge'])
+        )) &&
+        data.isVisible is bool &&
+        data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidInquiryCreate(data) {
+      return data.keys().hasAll(['name', 'email', 'projectType', 'message', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['name', 'email', 'projectType', 'message', 'status', 'createdAt']) &&
+        isBoundedString(data.name, 2, 120) &&
+        isBoundedString(data.email, 5, 180) &&
+        data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
+        data.projectType in ['UGC Video', 'Graphic Design', 'Both'] &&
+        isBoundedString(data.message, 12, 2000) &&
+        data.status == 'new' &&
+        data.createdAt == request.time;
+    }
+
+    function isValidInquiryUpdate(data) {
+      return data.keys().hasAll(['name', 'email', 'projectType', 'message', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['name', 'email', 'projectType', 'message', 'status', 'createdAt']) &&
+        isBoundedString(data.name, 2, 120) &&
+        isBoundedString(data.email, 5, 180) &&
+        data.projectType in ['UGC Video', 'Graphic Design', 'Both'] &&
+        isBoundedString(data.message, 12, 2000) &&
+        data.status in ['new', 'reviewed', 'replied'];
+    }
+
+    // =========================================================================
+    // COLLECTION MATCH BLOCKS (Auth -> Static Validation -> Relational Admin)
+    // =========================================================================
+
+    match /site_config/{configId} {
+      allow get: if isValidId(configId);
+      allow create: if isVerifiedUser() && isValidId(configId) && isValidSiteConfig(incoming()) && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(configId) && isValidSiteConfig(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'theme', 'profile', 'hero', 'showreel', 'sections', 'retouching', 'updatedAt'
+        ]) && isAdmin();
+      allow delete: if false;
+    }
+
+    match /ugc_reels/{reelId} {
+      allow get: if isValidId(reelId);
+      allow list: if resource.data.sortOrder >= 0;
+      allow create: if isVerifiedUser() && isValidId(reelId) && isValidUgcReel(incoming()) && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(reelId) && isValidUgcReel(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'client', 'platform', 'durationSeconds', 'aspectRatio',
+          'thumbnailUrl', 'videoUrl', 'accentColor', 'hookLine',
+          'campaignBrief', 'hookStrategy', 'editingBreakdown',
+          'deliverables', 'sortOrder', 'updatedAt'
+        ]) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(reelId) && isAdmin();
+    }
+
+    match /design_projects/{projectId} {
+      allow get: if isValidId(projectId);
+      allow list: if resource.data.sortOrder >= 0;
+      allow create: if isVerifiedUser() && isValidId(projectId) && isValidDesignProject(incoming()) && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(projectId) && isValidDesignProject(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'subtitle', 'category', 'year', 'client',
+          'imageUrl', 'aspectClass', 'palette', 'tools',
+          'rationale', 'deliverables', 'sortOrder', 'updatedAt'
+        ]) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(projectId) && isAdmin();
+    }
+
+    match /capabilities/{capabilityId} {
+      allow get: if isValidId(capabilityId);
+      allow list: if resource.data.sortOrder >= 0;
+      allow create: if isVerifiedUser() && isValidId(capabilityId) && isValidCapability(incoming()) && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(capabilityId) && isValidCapability(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'number', 'title', 'summary', 'deliverables',
+          'accentBg', 'accentText', 'sortOrder', 'updatedAt'
+        ]) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(capabilityId) && isAdmin();
+    }
+
+    match /custom_sections/{sectionId} {
+      allow get: if isValidId(sectionId);
+      allow list: if resource.data.isVisible == true || isPrimaryAdmin();
+      allow create: if isVerifiedUser() && isValidId(sectionId) && isValidCustomSection(incoming()) && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(sectionId) && isValidCustomSection(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'layout', 'placement', 'accentTheme', 'eyebrow', 'heading', 'body',
+          'imageUrl', 'ctaLabel', 'ctaUrl', 'items', 'isVisible', 'sortOrder', 'updatedAt'
+        ]) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(sectionId) && isAdmin();
+    }
+
+    match /inquiries/{inquiryId} {
+      allow get: if isVerifiedUser() && isValidId(inquiryId) && isAdmin();
+      allow list: if isPrimaryAdmin() && resource.data.status in ['new', 'reviewed', 'replied'];
+      allow create: if isValidId(inquiryId) && isValidInquiryCreate(incoming());
+      allow update: if isVerifiedUser() && isValidId(inquiryId) && isValidInquiryUpdate(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().name == existing().name &&
+        incoming().email == existing().email &&
+        incoming().message == existing().message &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status']) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(inquiryId) && isAdmin();
+    }
+
+    match /admins/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isPrimaryAdmin());
+      allow write: if false;
+    }
+  }
+}

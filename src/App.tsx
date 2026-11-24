@@ -1,0 +1,519 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { onAuthStateChanged, type User } from 'firebase/auth';
+import { AnimatePresence, MotionConfig, motion, useScroll, useSpring } from 'motion/react';
+import { Check } from 'lucide-react';
+import {
+  CAPABILITIES,
+  DEFAULT_SITE_CONFIG,
+  DESIGN_PROJECTS,
+  UGC_REELS,
+} from './data/portfolioData';
+import { auth, isAuthorizedAdminUser, signOutAdmin } from './lib/firebase';
+import {
+  saveSiteConfig,
+  subscribeCapabilities,
+  subscribeCustomSections,
+  subscribeDesignProjects,
+  subscribeInquiries,
+  subscribeSiteConfig,
+  subscribeUgcReels,
+} from './services/portfolioStore';
+import type {
+  CapabilityItem,
+  CustomSection,
+  DesignCategory,
+  DesignProject,
+  NavSectionId,
+  ProjectInquiryRecord,
+  SiteConfig,
+  UgcReel,
+} from './types/portfolio';
+import { computeActiveSection } from './utils/portfolioLogic';
+import {
+  applyThemeToRoot,
+  resolveInitialThemeMode,
+  THEME_STORAGE_KEY,
+  toggleThemeMode,
+  type ThemeMode,
+} from './utils/themeMode';
+import { SCROLL_PARALLAX_SPRING, SNAPPY_SPRING } from './utils/motionConfig';
+import { VerticalNavRail } from './components/VerticalNavRail';
+import { HeroBento } from './components/HeroBento';
+import { UgcReelsSection } from './components/UgcReelsSection';
+import { DesignWorkSection } from './components/DesignWorkSection';
+import { ClientsSection } from './components/ClientsSection';
+import { AboutContactFooter } from './components/AboutContactFooter';
+import { VideoLightboxModal } from './components/VideoLightboxModal';
+import { ArtworkLightboxModal } from './components/ArtworkLightboxModal';
+import { ProjectInquiryDrawer } from './components/ProjectInquiryDrawer';
+import { CustomSectionsRenderer } from './components/CustomSectionsRenderer';
+import { AdminAccessGate } from './components/AdminAccessGate';
+import { AdminDashboard } from './components/AdminDashboard';
+import { PhysicsCursor } from './components/PhysicsCursor';
+
+const TRACKED_SECTIONS: NavSectionId[] = [
+  'about',
+  'ugc-reels',
+  'design-work',
+  'clients',
+  'contact',
+];
+
+function clearAdminHash() {
+  if (window.location.hash.toLowerCase() === '#admin') {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+}
+
+export default function App() {
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const isAdmin = isAuthorizedAdminUser(authUser);
+
+  const [activeView, setActiveView] = useState<'portfolio' | 'admin'>('portfolio');
+  const [showAdminGate, setShowAdminGate] = useState(false);
+
+  // Live CMS state (falls back cleanly to defaults until synced to Firestore)
+  const [cloudSiteConfig, setCloudSiteConfig] = useState<SiteConfig | null>(null);
+  const [cloudReels, setCloudReels] = useState<UgcReel[] | null>(null);
+  const [cloudDesigns, setCloudDesigns] = useState<DesignProject[] | null>(null);
+  const [cloudCapabilities, setCloudCapabilities] = useState<CapabilityItem[] | null>(null);
+  const [customSections, setCustomSections] = useState<CustomSection[]>([]);
+  const [inquiries, setInquiries] = useState<ProjectInquiryRecord[]>([]);
+
+  const siteConfig = cloudSiteConfig ?? DEFAULT_SITE_CONFIG;
+  const ugcReels = cloudReels ?? UGC_REELS;
+  const designProjects = cloudDesigns ?? DESIGN_PROJECTS;
+  const capabilities = cloudCapabilities ?? CAPABILITIES;
+  const isUsingCloudDefaults = !cloudSiteConfig;
+
+  const [activeSection, setActiveSection] = useState<NavSectionId>('about');
+  const [activeDesignCategory, setActiveDesignCategory] = useState<DesignCategory>('All Projects');
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [activeReel, setActiveReel] = useState<UgcReel | null>(null);
+  const [activeArtwork, setActiveArtwork] = useState<DesignProject | null>(null);
+  const [isInquiryOpen, setIsInquiryOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    if (typeof window === 'undefined') return 'light';
+    try {
+      return resolveInitialThemeMode(window.localStorage.getItem(THEME_STORAGE_KEY));
+    } catch {
+      return 'light';
+    }
+  });
+
+  // Smooth thin top scroll progress bar
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, SCROLL_PARALLAX_SPRING);
+
+  // 1. Firebase Auth listener — strictly enforce verified primary admin
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && !isAuthorizedAdminUser(user)) {
+        void signOutAdmin();
+        setAuthUser(null);
+        setActiveView('portfolio');
+        return;
+      }
+      setAuthUser(user);
+      if (!user) {
+        setActiveView('portfolio');
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // 2. Hidden Admin Entry Trigger (#admin URL hash OR Ctrl/Cmd + Shift + A)
+  useEffect(() => {
+    const openAdminTrigger = () => {
+      if (isAdmin) {
+        setShowAdminGate(false);
+        setActiveView('admin');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setShowAdminGate(true);
+      }
+    };
+
+    const checkHash = () => {
+      if (window.location.hash.toLowerCase() === '#admin') {
+        openAdminTrigger();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        openAdminTrigger();
+      }
+    };
+
+    checkHash();
+    window.addEventListener('hashchange', checkHash);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('hashchange', checkHash);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAdmin]);
+
+  // 3. Live Firestore Subscriptions for public portfolio content
+  useEffect(() => {
+    const unsubConfig = subscribeSiteConfig(setCloudSiteConfig);
+    const unsubReels = subscribeUgcReels(setCloudReels);
+    const unsubDesigns = subscribeDesignProjects(setCloudDesigns);
+    const unsubCaps = subscribeCapabilities(setCloudCapabilities);
+
+    return () => {
+      unsubConfig();
+      unsubReels();
+      unsubDesigns();
+      unsubCaps();
+    };
+  }, []);
+
+  // 4. Custom sections subscription (public only sees visible; admin sees drafts too)
+  useEffect(() => {
+    const unsubCustom = subscribeCustomSections(isAdmin, setCustomSections);
+    return unsubCustom;
+  }, [isAdmin]);
+
+  // 5. Admin-only private inquiries subscription
+  useEffect(() => {
+    if (!isAdmin) {
+      setInquiries([]);
+      return;
+    }
+    const unsubInquiries = subscribeInquiries(setInquiries);
+    return unsubInquiries;
+  }, [isAdmin]);
+
+  // 6. Apply live Light / Dark Mode & Theme Palette CSS variables across the root document element
+  useEffect(() => {
+    applyThemeToRoot(document.documentElement, themeMode, siteConfig.theme);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+    } catch {
+      // Ignore storage failures in restricted browsing contexts
+    }
+  }, [themeMode, siteConfig.theme]);
+
+  const handleToggleTheme = useCallback(() => {
+    setThemeMode((prev) => toggleThemeMode(prev));
+  }, []);
+
+  // Dynamically highlight active vertical nav link on scroll
+  useEffect(() => {
+    if (activeView !== 'portfolio') return;
+
+    const updateActiveSection = () => {
+      const metrics = TRACKED_SECTIONS.map((id) => {
+        const el = document.getElementById(id);
+        return {
+          id,
+          offsetTop: el ? el.getBoundingClientRect().top + window.scrollY : Number.MAX_SAFE_INTEGER,
+        };
+      }).filter((item) => item.offsetTop < Number.MAX_SAFE_INTEGER);
+
+      const nextActive = computeActiveSection(window.scrollY, metrics, 220);
+      setActiveSection(nextActive);
+    };
+
+    updateActiveSection();
+    window.addEventListener('scroll', updateActiveSection, { passive: true });
+    window.addEventListener('resize', updateActiveSection, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', updateActiveSection);
+      window.removeEventListener('resize', updateActiveSection);
+    };
+  }, [activeView]);
+
+  const handleNavigate = useCallback(
+    (sectionId: NavSectionId) => {
+      setActiveSection(sectionId);
+      if (activeView !== 'portfolio') {
+        setActiveView('portfolio');
+        clearAdminHash();
+        window.setTimeout(() => {
+          document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 60);
+        return;
+      }
+      const target = document.getElementById(sectionId);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    },
+    [activeView],
+  );
+
+  const handleNavigateDesignCategory = useCallback(
+    (category: DesignCategory) => {
+      setActiveDesignCategory(category);
+      handleNavigate('design-work');
+    },
+    [handleNavigate],
+  );
+
+  const handlePortraitChange = useCallback(
+    (dataUrl: string) => {
+      if (!isAdmin) return;
+      const updated: SiteConfig = {
+        ...siteConfig,
+        profile: { ...siteConfig.profile, portraitUrl: dataUrl },
+      };
+      setCloudSiteConfig(updated);
+      void saveSiteConfig(updated);
+    },
+    [isAdmin, siteConfig],
+  );
+
+  const handleCopyEmail = useCallback(() => {
+    const email = siteConfig.profile.email;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(email).catch(() => {});
+    } else {
+      const tempInput = document.createElement('textarea');
+      tempInput.value = email;
+      tempInput.setAttribute('readonly', '');
+      tempInput.style.position = 'fixed';
+      tempInput.style.opacity = '0';
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      try {
+        document.execCommand('copy');
+      } catch {
+        // Ignore fallback failure in restricted environments
+      }
+      document.body.removeChild(tempInput);
+    }
+
+    setCopiedEmail(true);
+    window.setTimeout(() => {
+      setCopiedEmail(false);
+    }, 2400);
+  }, [siteConfig.profile.email]);
+
+  const featuredShowreelModalItem = useMemo<UgcReel>(
+    () => ({
+      id: 'showreel-main',
+      title: siteConfig.showreel.title,
+      client: siteConfig.showreel.client,
+      platform: 'Ad Creative',
+      durationSeconds: siteConfig.showreel.durationSeconds,
+      aspectRatio: '16:9',
+      thumbnailUrl: siteConfig.showreel.thumbnailUrl,
+      videoUrl: siteConfig.showreel.videoUrl || undefined,
+      accentColor: siteConfig.theme.primaryAccent,
+      hookLine: siteConfig.showreel.hookLine,
+      campaignBrief: siteConfig.showreel.campaignBrief,
+      hookStrategy: siteConfig.showreel.hookStrategy,
+      editingBreakdown: siteConfig.showreel.editingBreakdown,
+      deliverables: siteConfig.showreel.deliverables,
+    }),
+    [siteConfig.showreel, siteConfig.theme.primaryAccent],
+  );
+
+  const handleSignOutAdmin = async () => {
+    await signOutAdmin();
+    setActiveView('portfolio');
+    setShowAdminGate(false);
+    clearAdminHash();
+  };
+
+  return (
+    <MotionConfig reducedMotion="user">
+      <div
+        className="min-h-screen p-2.5 sm:p-4 lg:p-6 theme-surface"
+        style={{ backgroundColor: 'var(--canvas-bg)', color: 'var(--ink)' }}
+      >
+        {/* Thin Top Scroll Progress Bar */}
+        <motion.div
+          aria-hidden="true"
+          style={{ scaleX, backgroundColor: 'var(--periwinkle)' }}
+          className="fixed top-0 left-0 right-0 h-[3px] origin-left z-50 pointer-events-none"
+        />
+
+        {/* Editorial Physics-Based Follower Cursor (desktop fine-pointer only) */}
+        <PhysicsCursor
+          disabled={isAdmin && activeView === 'admin'}
+          isDarkMode={themeMode === 'dark'}
+        />
+
+        {/* Main Rounded Editorial Workspace Container */}
+        <div
+          className="max-w-[1380px] mx-auto rounded-[24px] lg:rounded-[32px] shadow-[0_24px_70px_rgba(17,17,17,0.07)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.55)] border theme-surface"
+          style={{
+            backgroundColor: 'var(--workspace-bg)',
+            borderColor: 'var(--border-subtle)',
+          }}
+        >
+          <div className="flex flex-col lg:flex-row">
+            {/* Left Sticky Vertical Navigation Rail (Desktop) + Compact Top Header (Mobile) */}
+            <VerticalNavRail
+              activeSection={activeSection}
+              onNavigate={handleNavigate}
+              brandName={siteConfig.profile.name}
+              isAdmin={isAdmin}
+              activeView={activeView}
+              themeMode={themeMode}
+              onToggleTheme={handleToggleTheme}
+              onOpenAdmin={() => {
+                if (isAdmin) {
+                  setActiveView('admin');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+            />
+
+          {/* Main Scrollable Content: Either Public Portfolio OR Admin Control Panel */}
+          <main className="flex-1 min-w-0 px-4 sm:px-7 lg:px-9 xl:px-11 pb-8">
+            {isAdmin && activeView === 'admin' ? (
+              <AdminDashboard
+                adminEmail={authUser?.email || ''}
+                isUsingCloudDefaults={isUsingCloudDefaults}
+                siteConfig={siteConfig}
+                ugcReels={ugcReels}
+                designProjects={designProjects}
+                capabilities={capabilities}
+                customSections={customSections}
+                inquiries={inquiries}
+                onViewLiveSite={() => {
+                  setActiveView('portfolio');
+                  clearAdminHash();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onSignOut={handleSignOutAdmin}
+              />
+            ) : (
+              <>
+                <HeroBento
+                  config={siteConfig}
+                  isAdmin={isAdmin}
+                  onPortraitChange={handlePortraitChange}
+                  copiedEmail={copiedEmail}
+                  onCopyEmail={handleCopyEmail}
+                  onOpenShowreel={() => setActiveReel(featuredShowreelModalItem)}
+                  onNavigate={handleNavigate}
+                  onNavigateDesignCategory={handleNavigateDesignCategory}
+                />
+
+                <CustomSectionsRenderer
+                  sections={customSections}
+                  placement="after-hero"
+                  onOpenInquiry={() => setIsInquiryOpen(true)}
+                />
+
+                <UgcReelsSection
+                  reels={ugcReels}
+                  sectionCopy={siteConfig.sections}
+                  onSelectReel={setActiveReel}
+                />
+
+                <CustomSectionsRenderer
+                  sections={customSections}
+                  placement="after-ugc"
+                  onOpenInquiry={() => setIsInquiryOpen(true)}
+                />
+
+                <DesignWorkSection
+                  projects={designProjects}
+                  sectionCopy={siteConfig.sections}
+                  retouching={siteConfig.retouching}
+                  activeCategory={activeDesignCategory}
+                  onSelectCategory={setActiveDesignCategory}
+                  onSelectProject={setActiveArtwork}
+                />
+
+                <CustomSectionsRenderer
+                  sections={customSections}
+                  placement="after-design"
+                  onOpenInquiry={() => setIsInquiryOpen(true)}
+                />
+
+                <ClientsSection capabilities={capabilities} />
+
+                <CustomSectionsRenderer
+                  sections={customSections}
+                  placement="after-capabilities"
+                  onOpenInquiry={() => setIsInquiryOpen(true)}
+                />
+
+                <AboutContactFooter
+                  profile={siteConfig.profile}
+                  sectionCopy={siteConfig.sections}
+                  copiedEmail={copiedEmail}
+                  onCopyEmail={handleCopyEmail}
+                  onOpenInquiry={() => setIsInquiryOpen(true)}
+                />
+              </>
+            )}
+          </main>
+        </div>
+      </div>
+
+        {/* Floating Copied Email Toast */}
+        <AnimatePresence>
+          {copiedEmail && (
+            <motion.div
+              role="status"
+              aria-live="polite"
+              initial={{ opacity: 0, y: 18, scale: 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.96 }}
+              transition={SNAPPY_SPRING}
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-white text-xs font-semibold shadow-xl border border-white/15"
+              style={{ backgroundColor: 'var(--obsidian)' }}
+            >
+              <span
+                className="w-5 h-5 rounded-full text-white flex items-center justify-center"
+                style={{ backgroundColor: 'var(--periwinkle)' }}
+              >
+                <Check className="w-3 h-3" aria-hidden="true" />
+              </span>
+              <span>Copied! {siteConfig.profile.email}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Modals & Inquiry Drawer */}
+        <VideoLightboxModal
+          reel={activeReel}
+          onClose={() => setActiveReel(null)}
+          onStartProject={() => setIsInquiryOpen(true)}
+        />
+
+        <ArtworkLightboxModal
+          project={activeArtwork}
+          onClose={() => setActiveArtwork(null)}
+          onStartProject={() => setIsInquiryOpen(true)}
+        />
+
+        <ProjectInquiryDrawer
+          profile={siteConfig.profile}
+          isOpen={isInquiryOpen}
+          onClose={() => setIsInquiryOpen(false)}
+        />
+
+        {/* Hidden Admin Authentication Gate (only appears via #admin hash or Ctrl/Cmd+Shift+A) */}
+        <AdminAccessGate
+          isOpen={showAdminGate && !isAdmin}
+          onClose={() => {
+            setShowAdminGate(false);
+            clearAdminHash();
+          }}
+          onAuthenticated={() => {
+            setShowAdminGate(false);
+            setActiveView('admin');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      </div>
+    </MotionConfig>
+  );
+}
+
