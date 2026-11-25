@@ -441,14 +441,14 @@ export default function App() {
   );
 
   const handlePortraitChange = useCallback(
-    (dataUrl: string) => {
+    async (dataUrl: string) => {
       if (!isAdmin) return;
       const updated: SiteConfig = {
         ...siteConfig,
         profile: { ...siteConfig.profile, portraitUrl: dataUrl },
       };
       setCloudSiteConfig(updated);
-      void saveSiteConfig(updated);
+      await saveSiteConfig(updated);
     },
     [isAdmin, siteConfig],
   );

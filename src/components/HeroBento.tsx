@@ -1,6 +1,7 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from 'motion/react';
 import { Check, Copy, Play, Upload, Users } from 'lucide-react';
+import { FALLBACK_PORTRAIT_URL } from '../data/portfolioData';
 import type { DesignCategory, NavSectionId, SiteConfig } from '../types/portfolio';
 import { formatDuration } from '../utils/portfolioLogic';
 import { compressImageFileToDataUrl } from '../utils/cmsUtils';
@@ -16,7 +17,7 @@ import {
 interface HeroBentoProps {
   config: SiteConfig;
   isAdmin: boolean;
-  onPortraitChange: (dataUrl: string) => void;
+  onPortraitChange: (dataUrl: string) => Promise<void> | void;
   copiedEmail: boolean;
   onCopyEmail: () => void;
   onOpenShowreel: () => void;
@@ -39,6 +40,8 @@ export function HeroBento({
   const heroRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prefersReducedMotion = useReducedMotion();
+  const [uploadingPortrait, setUploadingPortrait] = useState(false);
+  const [portraitError, setPortraitError] = useState<string | null>(null);
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -55,13 +58,17 @@ export function HeroBento({
   const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setUploadingPortrait(true);
+    setPortraitError(null);
     try {
-      const compressed = await compressImageFileToDataUrl(file, 900, 0.8);
-      onPortraitChange(compressed);
-    } catch {
-      // Fallback preview if compression fails
+      const compressed = await compressImageFileToDataUrl(file, 900, 0.82);
+      await onPortraitChange(compressed);
+    } catch (err) {
+      setPortraitError(err instanceof Error ? err.message : 'Could not update profile picture.');
+    } finally {
+      setUploadingPortrait(false);
+      event.target.value = '';
     }
-    event.target.value = '';
   };
 
   const { profile, hero, showreel, theme } = config;
@@ -134,11 +141,10 @@ export function HeroBento({
                       style={{ backgroundColor: 'var(--lilac-backdrop)' }}
                     >
                       <ResilientImage
-                        src={'https://drive.google.com/uc?export=download&id=1TNHf881kvCehLJe6yqZWiRTVq7bGSHRv?v=3'
-                          
-                        }
+                        src={profile.portraitUrl || FALLBACK_PORTRAIT_URL}
+                        fallbackSrc={FALLBACK_PORTRAIT_URL}
                         alt={`${profile.name} — ${profile.role} portrait`}
-                        className="w-full h-full object-cover object-top grayscale contrast-110 transition-transform duration-500 group-hover/avatar:scale-105"
+                        className="w-full h-full object-cover object-top transition-transform duration-500 group-hover/avatar:scale-105"
                         fallbackTitle={profile.name}
                         fallbackAccent={theme.lilacBackdrop}
                         priority
@@ -158,17 +164,29 @@ export function HeroBento({
                       />
                       <button
                         type="button"
+                        disabled={uploadingPortrait}
                         onClick={() => fileInputRef.current?.click()}
                         title="Replace Photo (Saves to Cloud)"
-                        className="absolute bottom-1 right-1 inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-full bg-white text-[#111111] text-[11px] font-semibold shadow-md transition-all duration-200 cursor-pointer hover:bg-[#121214] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:opacity-0 sm:group-hover/avatar:opacity-100 focus-visible:opacity-100"
+                        className="absolute bottom-1 right-1 inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-full bg-white text-[#111111] text-[11px] font-semibold shadow-md transition-all duration-200 cursor-pointer hover:bg-[#121214] hover:text-white disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:opacity-0 sm:group-hover/avatar:opacity-100 focus-visible:opacity-100"
                         aria-label="Replace portrait photo"
                       >
                         <Upload className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span className="hidden sm:inline">Replace Photo</span>
+                        <span className="hidden sm:inline">
+                          {uploadingPortrait ? 'Saving...' : 'Replace Photo'}
+                        </span>
                       </button>
                     </>
                   )}
                 </div>
+
+                {portraitError && (
+                  <p
+                    role="alert"
+                    className="text-xs font-medium text-white bg-black/35 px-3 py-1.5 rounded-xl max-w-xs"
+                  >
+                    {portraitError}
+                  </p>
+                )}
 
                 {/* Bold White Stacked Greeting */}
                 <div className="space-y-2.5 max-w-md">

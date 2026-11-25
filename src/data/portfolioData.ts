@@ -21,6 +21,8 @@ export const DEFAULT_THEME_PALETTE: ThemePalette = {
   lilacBackdrop: '#E8B5F5',
 };
 
+export const FALLBACK_PORTRAIT_URL = '/src/assets/images/malay_portrait_bw_1795170070075.jpg';
+
 // ============================================================================
 // DEFAULT SITE CONFIG (Editable live in Admin Dashboard)
 // ============================================================================
@@ -34,7 +36,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
     whatsappUrl: 'https://wa.me/918000350039',
     location: 'India · Working Worldwide',
     availability: 'Available for Q2–Q3 brand & UGC collaborations',
-    portraitUrl: '/src/assets/images/malay_portrait_bw_1795170070075.jpg',
+    portraitUrl: 'https://lh3.googleusercontent.com/d/1TNHf881kvCehLJe6yqZWiRTVq7bGSHRv=w1000',
     instagramUrl: 'https://instagram.com',
     behanceUrl: 'https://behance.net',
     gumroadUrl: 'https://gumroad.com',

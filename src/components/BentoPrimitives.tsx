@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   motion,
   useAnimationFrame,
@@ -16,6 +16,7 @@ import {
   INITIAL_RAPID_TAP_STATE,
   type RapidTapState,
 } from '../utils/rapidTapCounter';
+import { resolveImageCandidates } from '../utils/imageUrl';
 
 interface CornerBracketProps {
   className?: string;
@@ -111,6 +112,8 @@ interface ResilientImageProps {
   className?: string;
   fallbackTitle?: string;
   fallbackAccent?: string;
+  /** Optional backup image URL tried automatically if the primary URL fails to load */
+  fallbackSrc?: string;
   style?: React.CSSProperties;
   /** Enables a CSS backdrop-filter frosted blur placeholder while the image loads */
   blurPlaceholder?: boolean;
@@ -121,8 +124,8 @@ interface ResilientImageProps {
 }
 
 /**
- * Zero-Broken-Image resilient image wrapper with fallback surface and optional
- * CSS backdrop-filter blurred loading placeholder that fades out smoothly on load.
+ * Zero-Broken-Image resilient image wrapper with Google Drive URL normalization,
+ * multi-candidate fallback stepping, and optional CSS backdrop-filter blurred placeholder.
  */
 export function ResilientImage({
   src,
@@ -130,18 +133,27 @@ export function ResilientImage({
   className = 'w-full h-full object-cover',
   fallbackTitle,
   fallbackAccent = '#8A85E8',
+  fallbackSrc,
   style,
   blurPlaceholder = false,
   placeholderColor,
   priority = false,
 }: ResilientImageProps) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const candidates = useMemo(() => resolveImageCandidates(src, fallbackSrc), [src, fallbackSrc]);
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(!blurPlaceholder);
   const [showPlaceholder, setShowPlaceholder] = useState(blurPlaceholder);
 
+  const activeSrc = candidates[candidateIndex] ?? '';
+
   useEffect(() => {
+    setCandidateIndex(0);
     setHasError(false);
+  }, [src, fallbackSrc]);
+
+  useEffect(() => {
     if (!blurPlaceholder) {
       setIsLoaded(true);
       setShowPlaceholder(false);
@@ -157,7 +169,7 @@ export function ResilientImage({
 
     setIsLoaded(false);
     setShowPlaceholder(true);
-  }, [src, blurPlaceholder]);
+  }, [activeSrc, blurPlaceholder]);
 
   useEffect(() => {
     if (!blurPlaceholder || !isLoaded || !showPlaceholder) return;
@@ -167,7 +179,17 @@ export function ResilientImage({
     return () => window.clearTimeout(timer);
   }, [blurPlaceholder, isLoaded, showPlaceholder]);
 
-  if (hasError || !src) {
+  const handleImageError = () => {
+    if (candidateIndex + 1 < candidates.length) {
+      setCandidateIndex((prev) => prev + 1);
+      return;
+    }
+    setHasError(true);
+    setIsLoaded(true);
+    setShowPlaceholder(false);
+  };
+
+  if (hasError || !activeSrc) {
     return (
       <div
         role="img"
@@ -189,10 +211,10 @@ export function ResilientImage({
     return (
       <img
         ref={imgRef}
-        src={src}
+        src={activeSrc}
         alt={alt}
         referrerPolicy="no-referrer"
-        onError={() => setHasError(true)}
+        onError={handleImageError}
         className={className}
         style={style}
         loading={priority ? 'eager' : 'lazy'}
@@ -221,15 +243,11 @@ export function ResilientImage({
 
       <img
         ref={imgRef}
-        src={src}
+        src={activeSrc}
         alt={alt}
         referrerPolicy="no-referrer"
         onLoad={() => setIsLoaded(true)}
-        onError={() => {
-          setHasError(true);
-          setIsLoaded(true);
-          setShowPlaceholder(false);
-        }}
+        onError={handleImageError}
         className={`${className} transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           isLoaded ? 'opacity-100' : 'opacity-0 scale-[1.04]'
         }`}

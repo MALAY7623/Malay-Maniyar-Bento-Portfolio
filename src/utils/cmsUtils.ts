@@ -12,6 +12,7 @@ import type {
   UgcPlatform,
   UgcReel,
 } from '../types/portfolio';
+import { normalizeImageUrl } from './imageUrl';
 
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 
@@ -103,7 +104,8 @@ export function sanitizeSiteConfig(raw: Partial<SiteConfig>): SiteConfig {
       whatsappUrl: truncateString(p.whatsappUrl, 300),
       location: truncateString(p.location, 120),
       availability: truncateString(p.availability, 160),
-      portraitUrl: truncateString(p.portraitUrl, 260000),
+      portraitUrl:
+        normalizeImageUrl(truncateString(p.portraitUrl, 260000)) || d.profile.portraitUrl,
       instagramUrl: truncateString(p.instagramUrl, 300),
       behanceUrl: truncateString(p.behanceUrl, 300),
       gumroadUrl: truncateString(p.gumroadUrl, 300),
@@ -130,7 +132,7 @@ export function sanitizeSiteConfig(raw: Partial<SiteConfig>): SiteConfig {
       title: truncateString(s.title, 140) || d.showreel.title,
       client: truncateString(s.client, 100) || d.showreel.client,
       durationSeconds: safeDuration,
-      thumbnailUrl: truncateString(s.thumbnailUrl, 260000),
+      thumbnailUrl: normalizeImageUrl(truncateString(s.thumbnailUrl, 260000)),
       videoUrl: truncateString(s.videoUrl, 2000),
       hookLine: truncateString(s.hookLine, 240),
       campaignBrief: truncateString(s.campaignBrief, 1200),
@@ -161,7 +163,7 @@ export function sanitizeSiteConfig(raw: Partial<SiteConfig>): SiteConfig {
     retouching: {
       title: truncateString(r.title, 140) || d.retouching.title,
       subtitle: truncateString(r.subtitle, 400),
-      imageUrl: truncateString(r.imageUrl, 260000),
+      imageUrl: normalizeImageUrl(truncateString(r.imageUrl, 260000)),
       workflowSummary: truncateString(r.workflowSummary, 240),
       toolsSummary: truncateString(r.toolsSummary, 180),
     },
@@ -180,7 +182,7 @@ export function sanitizeUgcReelPayload(reel: Omit<UgcReel, 'id'>, sortOrder = 0)
     durationSeconds: Number.isFinite(duration) ? Math.min(600, Math.max(1, Math.round(duration))) : 15,
     aspectRatio: reel.aspectRatio === '16:9' ? ('16:9' as const) : ('9:16' as const),
     thumbnailUrl:
-      truncateString(reel.thumbnailUrl, 260000) ||
+      normalizeImageUrl(truncateString(reel.thumbnailUrl, 260000)) ||
       '/src/assets/images/ugc_app_hook_1795169920625.jpg',
     videoUrl: truncateString(reel.videoUrl || '', 2000),
     accentColor: normalizeHexColor(reel.accentColor, '#8A85E8'),
@@ -224,7 +226,7 @@ export function sanitizeDesignProjectPayload(project: Omit<DesignProject, 'id'>,
     year: boundedStringWithFallback(project.year, 4, 12, '2026'),
     client: truncateString(project.client, 100),
     imageUrl:
-      truncateString(project.imageUrl, 260000) ||
+      normalizeImageUrl(truncateString(project.imageUrl, 260000)) ||
       '/src/assets/images/design_brand_identity_1795169924996.jpg',
     aspectClass,
     palette: (Array.isArray(project.palette) ? project.palette : [])
@@ -289,7 +291,7 @@ export function sanitizeCustomSectionPayload(
     eyebrow: truncateString(section.eyebrow, 100),
     heading: truncateString(section.heading, 160) || 'New Highlight Section',
     body: truncateString(section.body, 2000),
-    imageUrl: truncateString(section.imageUrl, 260000),
+    imageUrl: normalizeImageUrl(truncateString(section.imageUrl, 260000)),
     ctaLabel: truncateString(section.ctaLabel, 60),
     ctaUrl: truncateString(section.ctaUrl, 500),
     items: (Array.isArray(section.items) ? section.items : [])
@@ -297,7 +299,7 @@ export function sanitizeCustomSectionPayload(
       .map((item) => ({
         title: truncateString(item.title, 100),
         description: truncateString(item.description, 400),
-        imageUrl: truncateString(item.imageUrl, 120000),
+        imageUrl: normalizeImageUrl(truncateString(item.imageUrl, 120000)),
         badge: truncateString(item.badge, 40),
       }))
       .filter((item) => item.title.length > 0 || item.description.length > 0),
@@ -323,48 +325,81 @@ export function filterAndSortCustomSections(
 }
 
 /**
- * Compress an uploaded browser image File into a crisp web JPEG data URL safe for Firestore (< 220KB).
+ * Compress an uploaded browser image File into a crisp web data URL safe for Firestore (< 240KB).
+ * Automatically steps down quality and dimensions if needed, and preserves PNG/WebP alpha via WebP.
  */
 export function compressImageFileToDataUrl(
   file: File,
   maxWidth = 1100,
-  quality = 0.78,
+  quality = 0.8,
 ): Promise<string> {
+  const MAX_FIRESTORE_DATA_URL_LEN = 240000;
+
   return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Please select a valid image file (PNG, JPG, or WebP).'));
+      return;
+    }
+
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Could not read selected image file.'));
     reader.onload = () => {
       const img = new Image();
-      img.onerror = () => reject(new Error('Invalid image file.'));
+      img.onerror = () => reject(new Error('Invalid or unsupported image file.'));
       img.onload = () => {
-        const scale = img.width > maxWidth ? maxWidth / img.width : 1;
-        const targetW = Math.max(1, Math.round(img.width * scale));
-        const targetH = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = targetW;
-        canvas.height = targetH;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Canvas compression unavailable.'));
-          return;
+        const prefersAlpha = file.type === 'image/png' || file.type === 'image/webp';
+        const widthSteps = Array.from(
+          new Set([maxWidth, Math.min(maxWidth, 720), Math.min(maxWidth, 540), 400]),
+        );
+        const qualitySteps = [quality, 0.72, 0.62, 0.52];
+
+        const encodeAt = (limitWidth: number, q: number, mime: 'image/webp' | 'image/jpeg') => {
+          const scale = img.width > limitWidth ? limitWidth / img.width : 1;
+          const targetW = Math.max(1, Math.round(img.width * scale));
+          const targetH = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return null;
+          if (mime === 'image/jpeg') {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, targetW, targetH);
+          }
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+          const encoded = canvas.toDataURL(mime, q);
+          // Some browsers fall back to image/png if WebP encoding isn't supported
+          if (mime === 'image/webp' && !encoded.startsWith('data:image/webp')) {
+            return null;
+          }
+          return encoded;
+        };
+
+        const mimeOrder: ('image/webp' | 'image/jpeg')[] = prefersAlpha
+          ? ['image/webp', 'image/jpeg']
+          : ['image/jpeg'];
+
+        for (const mime of mimeOrder) {
+          for (const limitW of widthSteps) {
+            for (const q of qualitySteps) {
+              const candidate = encodeAt(limitW, q, mime);
+              if (candidate && candidate.length <= MAX_FIRESTORE_DATA_URL_LEN) {
+                resolve(candidate);
+                return;
+              }
+            }
+          }
         }
-        ctx.drawImage(img, 0, 0, targetW, targetH);
-        let dataUrl = canvas.toDataURL('image/jpeg', quality);
-        if (dataUrl.length > 240000) {
-          dataUrl = canvas.toDataURL('image/jpeg', 0.58);
-        }
-        if (dataUrl.length > 255000) {
-          reject(
-            new Error(
-              'Image is too large even after compression. Please choose a smaller photo or paste an image URL.',
-            ),
-          );
-          return;
-        }
-        resolve(dataUrl);
+
+        reject(
+          new Error(
+            'Image is still too large after optimization. Please try a smaller photo or paste an image link.',
+          ),
+        );
       };
       img.src = String(reader.result);
     };
     reader.readAsDataURL(file);
   });
 }
+

@@ -19,7 +19,12 @@ import {
   Type,
   Upload,
 } from 'lucide-react';
-import { DEFAULT_THEME_PALETTE, DESIGN_CATEGORIES } from '../data/portfolioData';
+import {
+  DEFAULT_THEME_PALETTE,
+  DESIGN_CATEGORIES,
+  FALLBACK_PORTRAIT_URL,
+} from '../data/portfolioData';
+import { ResilientImage } from './BentoPrimitives';
 import {
   deleteCapability,
   deleteCustomSection,
@@ -51,6 +56,7 @@ import type {
   UgcReel,
 } from '../types/portfolio';
 import { compressImageFileToDataUrl } from '../utils/cmsUtils';
+import { normalizeImageUrl } from '../utils/imageUrl';
 
 type AdminTab =
   | 'palette'
@@ -152,12 +158,16 @@ function ImageField({
   onChange,
   onNotify,
   maxWidth = 1100,
+  circular = false,
+  fallbackSrc,
 }: {
   label: string;
   value: string;
   onChange: (next: string) => void;
   onNotify: (msg: string, isError?: boolean) => void;
   maxWidth?: number;
+  circular?: boolean;
+  fallbackSrc?: string;
 }) {
   const [uploading, setUploading] = useState(false);
 
@@ -166,7 +176,7 @@ function ImageField({
     if (!file) return;
     setUploading(true);
     try {
-      const dataUrl = await compressImageFileToDataUrl(file, maxWidth, 0.78);
+      const dataUrl = await compressImageFileToDataUrl(file, maxWidth, 0.8);
       onChange(dataUrl);
       onNotify('Image optimized and ready to save.');
     } catch (err) {
@@ -174,6 +184,14 @@ function ImageField({
     } finally {
       setUploading(false);
       e.target.value = '';
+    }
+  };
+
+  const handleUrlBlur = () => {
+    const normalized = normalizeImageUrl(value);
+    if (normalized && normalized !== value) {
+      onChange(normalized);
+      onNotify('Google Drive or image link automatically normalized for direct display.');
     }
   };
 
@@ -185,7 +203,8 @@ function ImageField({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Paste image URL (/src/assets/... or https://...) or upload"
+          onBlur={handleUrlBlur}
+          placeholder="Paste image URL, Google Drive share link, or upload"
           className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl bg-white border border-black/12 text-xs text-[#111111] focus:outline-none focus:ring-2 focus:ring-[var(--periwinkle)]"
         />
         <label className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#ECECEE] hover:bg-[#111111] hover:text-white text-xs font-bold text-[#111111] transition-colors cursor-pointer whitespace-nowrap shrink-0">
@@ -195,8 +214,20 @@ function ImageField({
         </label>
       </div>
       {value && (
-        <div className="w-24 h-16 rounded-xl overflow-hidden border border-black/10 bg-[#EAEAEA]">
-          <img src={value} alt={label} className="w-full h-full object-cover" />
+        <div
+          className={
+            circular
+              ? 'w-20 h-20 rounded-full overflow-hidden border border-black/10 bg-[var(--lilac-backdrop)]'
+              : 'w-24 h-16 rounded-xl overflow-hidden border border-black/10 bg-[#EAEAEA]'
+          }
+        >
+          <ResilientImage
+            src={value}
+            fallbackSrc={fallbackSrc}
+            alt={label}
+            className="w-full h-full object-cover object-top"
+            fallbackTitle={label}
+          />
         </div>
       )}
     </div>
@@ -785,6 +816,8 @@ export function AdminDashboard({
               }
               onNotify={notify}
               maxWidth={900}
+              circular
+              fallbackSrc={FALLBACK_PORTRAIT_URL}
             />
           </div>
 
